@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TreeView?>
+<?import javafx.scene.layout.Pane?>
+<SplitPane fx:id="pane" dividerPositions="0.5" xmlns="http://javafx.com/javafx/24.0.1"
+           xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.a8043.simpleIDE.views.SettingsModal">
+    <items>
+        <TreeView fx:id="classificationTree" prefHeight="570.0" prefWidth="180.0"/>
+        <Pane prefHeight="570.0" prefWidth="800.0"/>
+    </items>
+</SplitPane>

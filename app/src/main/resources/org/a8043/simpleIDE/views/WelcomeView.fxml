@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+<AnchorPane prefHeight="600.0" prefWidth="1000.0" styleClass="bg" xmlns="http://javafx.com/javafx/24.0.1"
+            xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.a8043.simpleIDE.views.WelcomeView">
+    <children>
+        <Label layoutX="14.0" layoutY="3.0" prefHeight="38.0" prefWidth="168.0" text="welcome.allProject"
+               AnchorPane.leftAnchor="14.0" AnchorPane.topAnchor="3.0">
+            <font>
+                <Font size="22.0"/>
+            </font>
+        </Label>
+        <HBox layoutX="173.0" layoutY="7.0" styleClass="island" AnchorPane.leftAnchor="173.0"
+              AnchorPane.topAnchor="7.0">
+            <children>
+                <TextField fx:id="searchField" prefHeight="29.0" prefWidth="174.0"/>
+                <Button mnemonicParsing="false" onAction="#search" prefHeight="29.0" prefWidth="70.0" text="search"/>
+            </children>
+        </HBox>
+        <Button layoutX="895.2" layoutY="3.0" mnemonicParsing="false" prefHeight="38.0" prefWidth="90.0"
+                text="welcome.newProject" AnchorPane.rightAnchor="8.0" AnchorPane.topAnchor="8.0"/>
+        <ScrollPane layoutX="3.200000047683716" layoutY="54.400001525878906" styleClass="island"
+                    AnchorPane.bottomAnchor="3.0" AnchorPane.leftAnchor="3.0" AnchorPane.rightAnchor="3.0"
+                    AnchorPane.topAnchor="54.0">
+            <content>
+                <VBox fx:id="projectsBox"/>
+            </content>
+        </ScrollPane>
+        <Button layoutX="800.0" layoutY="7.0" mnemonicParsing="false" onAction="#openSettingsModal" prefHeight="38.0"
+                prefWidth="90.0" text="settings" AnchorPane.rightAnchor="109.6" AnchorPane.topAnchor="7.0"/>
+    </children>
+</AnchorPane>

@@ -1,0 +1,340 @@
+* {
+    -fx-text-fill: white;
+    -fx-highlight-fill: rgb(33, 66, 131);
+}
+
+.bg {
+    -fx-background-color: rgb(53, 56, 60);
+}
+
+.island {
+    -fx-background-color: rgb(18, 19, 20);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+/* bezel */
+
+.bezel,
+.button,
+.combo-box,
+.text-field {
+    -fx-border-color: rgb(63, 94, 125);
+    -fx-border-width: 2px;
+    -fx-border-radius: 5px;
+}
+
+/* combo box */
+
+.combo-box-popup .list-view {
+    -fx-background-color: rgb(53, 56, 60);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+/* list view */
+
+.list-view {
+    -fx-border-radius: 5px;
+    -fx-padding: 2px;
+}
+
+.list-cell {
+    -fx-border-width: 2px;
+    -fx-border-radius: 5px;
+    -fx-padding: 4px;
+}
+
+.list-view .list-cell:hover {
+    -fx-background-color: rgb(57, 59, 64);
+}
+
+.list-view .list-cell:selected {
+    -fx-background-color: rgb(46, 67, 110);
+}
+
+/* button */
+
+.button {
+    -fx-alignment: center;
+}
+
+.button:hover {
+    -fx-background-color: rgb(57, 59, 64);
+}
+
+/* tree */
+
+.tree-cell {
+    -fx-border-width: 2px;
+    -fx-border-radius: 5px;
+    -fx-padding: 4px;
+}
+
+.tree-cell:hover {
+    -fx-background-color: rgb(57, 59, 64);
+}
+
+.tree-cell:selected {
+    -fx-background-color: rgb(37, 50, 77);
+}
+
+/* tab */
+
+.tab-pane {
+    -fx-padding: 5px;
+}
+
+.tab {
+    -fx-border-width: 2px;
+    -fx-border-radius: 5px;
+    -fx-padding: 4px;
+}
+
+.tab:hover {
+    -fx-background-color: rgb(57, 59, 64);
+}
+
+.tab:selected {
+    -fx-border-color: rgb(49, 75, 126);
+    -fx-background-color: rgb(37, 50, 77);
+}
+
+/* code editor */
+
+.code-area {
+    -fx-background-color: rgb(18, 19, 20);
+    -fx-font-family: 'Monospaced', 'Consolas', monospace;
+}
+
+.code-area .caret {
+    -fx-stroke: white;
+}
+
+.code-editor-tool-bar {
+    -fx-background-color: rgb(38, 40, 43, 0.5);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+.code-editor-tool-bar:hover {
+    -fx-background-color: rgb(38, 40, 43);
+}
+
+.code-editor-tip-box {
+    -fx-background-color: rgb(38, 40, 43);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+/* modal */
+
+.modal-bg {
+    -fx-background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal {
+    -fx-background-color: rgb(64, 68, 72);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+/* progress bar */
+
+.progress-bar {
+    -fx-background-color: rgb(42, 46, 49);
+    -fx-border-color: rgb(63, 94, 125);
+    -fx-border-width: 2px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-padding: 1px;
+}
+
+.progress-bar .bar {
+    -fx-background-color: linear-gradient(to right, rgb(33, 66, 131), rgb(49, 75, 126));
+    -fx-background-insets: 0;
+    -fx-background-radius: 4px;
+    -fx-padding: 0.5em;
+}
+
+.progress-bar .track {
+    -fx-background-color: rgb(42, 46, 49);
+    -fx-background-radius: 4px;
+}
+
+/* scroll bar */
+
+.scroll-bar:horizontal,
+.scroll-bar:vertical {
+    -fx-background-color: rgb(53, 56, 60);
+    -fx-background-radius: 5px;
+}
+
+.scroll-bar:horizontal .thumb,
+.scroll-bar:vertical .thumb {
+    -fx-background-color: rgb(63, 94, 125);
+    -fx-background-radius: 5px;
+    -fx-border-radius: 5px;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgb(73, 104, 145);
+}
+
+.scroll-bar .thumb:pressed {
+    -fx-background-color: rgb(49, 75, 126);
+}
+
+.scroll-bar:horizontal .track,
+.scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+}
+
+.code-area .scroll-bar:vertical {
+    -fx-background-color: rgb(18, 19, 20);
+}
+
+.code-area .scroll-bar:vertical .thumb {
+    -fx-background-color: rgb(63, 94, 125);
+}
+
+.list-view .scroll-bar,
+.tree-view .scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical {
+    -fx-pref-width: 8px;
+}
+
+.scroll-bar:horizontal {
+    -fx-pref-height: 8px;
+}
+
+.scroll-bar.no-arrows .increment-button,
+.scroll-bar.no-arrows .decrement-button {
+    -fx-padding: 0;
+    -fx-opacity: 0;
+    -fx-pref-height: 0;
+    -fx-pref-width: 0;
+}
+
+/* complete */
+
+completion-description-label {
+    -fx-text-fill: rgb(110, 111, 94);
+}
+
+/* hyperlink */
+
+.hyperlink {
+    -fx-text-fill: rgb(33, 150, 243);
+}
+
+/* check box */
+
+.check-box {
+    -fx-text-fill: white;
+    -fx-label-padding: 0 0 0 8px;
+}
+
+.check-box .box {
+    -fx-background-color: rgb(53, 56, 60);
+    -fx-border-color: rgb(63, 94, 125);
+    -fx-border-width: 2px;
+    -fx-border-radius: 3px;
+    -fx-background-radius: 3px;
+    -fx-padding: 3px;
+}
+
+.check-box:hover .box {
+    -fx-background-color: rgb(57, 59, 64);
+    -fx-border-color: rgb(73, 104, 145);
+}
+
+.check-box:selected .box {
+    -fx-background-color: rgb(33, 66, 131);
+    -fx-border-color: rgb(49, 75, 126);
+}
+
+.check-box:selected:hover .box {
+    -fx-background-color: rgb(46, 67, 110);
+}
+
+.check-box .mark {
+    -fx-shape: "M1.73,4.91 L3.99,7.35 L8.27,2.65";
+    -fx-background-color: white;
+    -fx-background-insets: 0;
+    -fx-scale-shape: true;
+    -fx-stroke: white;
+    -fx-stroke-width: 1.5px;
+}
+
+.check-box:indeterminate .mark {
+    -fx-shape: "M2,5 L8,5";
+    -fx-background-color: white;
+}
+
+.check-box:focused .box {
+    -fx-border-color: rgb(33, 150, 243);
+    -fx-effect: null;
+}
+
+.check-box:disabled {
+    -fx-opacity: 0.5;
+}
+
+.check-box:disabled .box {
+    -fx-background-color: rgb(42, 46, 49);
+    -fx-border-color: rgb(53, 56, 60);
+}
+
+/* label */
+
+.label .not-important {
+    -fx-font-size: 10px;
+    -fx-text-fill: rgb(110, 111, 94);
+}
+
+/* split pane */
+
+.split-pane {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.split-pane > .split-pane-divider {
+    -fx-background-color: rgb(63, 94, 125);
+    -fx-padding: 0 1px 0 1px;
+}
+
+.split-pane > .split-pane-divider:hover {
+    -fx-background-color: rgb(73, 104, 145);
+}
+
+.split-pane > .split-pane-divider:pressed {
+    -fx-background-color: rgb(49, 75, 126);
+}
+
+.split-pane:horizontal > .split-pane-divider {
+    -fx-background-color: rgb(63, 94, 125);
+    -fx-pref-width: 3px;
+}
+
+.split-pane:vertical > .split-pane-divider {
+    -fx-background-color: rgb(63, 94, 125);
+    -fx-pref-height: 3px;
+}
+
+.split-pane > .split-pane-divider > .horizontal-grabber,
+.split-pane > .split-pane-divider > .vertical-grabber {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-opacity: 0;
+}
+
+/* separator */
+
+.separator {
+    -fx-border-color: rgb(63, 94, 125);
+}

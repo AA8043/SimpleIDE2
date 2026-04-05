@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.*?>
+<AnchorPane fx:id="pane" prefHeight="600.0" prefWidth="1000.0" styleClass="bg" xmlns="http://javafx.com/javafx/24.0.1"
+            xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.a8043.simpleIDE.views.FileTab">
+    <children>
+        <HBox fx:id="toolBar" layoutX="3.8" layoutY="563.2" prefHeight="32.0" prefWidth="990.0"
+              styleClass="code-editor-tool-bar" AnchorPane.bottomAnchor="4.7999999999999545" AnchorPane.leftAnchor="3.8"
+              AnchorPane.rightAnchor="5.7999999999999545"/>
+        <HBox fx:id="tipBox" layoutX="753.0" layoutY="31.0" prefHeight="95.0" prefWidth="393.0"
+              styleClass="code-editor-tip-box" visible="false" AnchorPane.rightAnchor="11.0"
+              AnchorPane.topAnchor="10.0"/>
+    </children>
+</AnchorPane>

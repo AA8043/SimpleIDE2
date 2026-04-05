@@ -1,0 +1,27 @@
+.default {
+    -fx-fill: white;
+}
+
+.problem {
+    -fx-fill: red;
+}
+
+.class-name, .method-name {
+    -fx-fill: rgb(86, 168, 245);
+}
+
+.string-literal {
+    -fx-fill: rgb(105, 164, 84);
+}
+
+.comment {
+    -fx-fill: gray;
+}
+
+.keyword {
+    -fx-fill: rgb(206, 132, 77);
+}
+
+.var-type {
+    -fx-fill: rgb(78, 201, 176);
+}

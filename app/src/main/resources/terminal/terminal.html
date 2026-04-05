@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="./xterm.css"/>
+    <script src="./xterm.js"></script>
+    <script src="./xterm-addon-fit.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1e1e2f;
+        }
+
+        #terminal-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+            background-color: #1e1e2f;
+        }
+
+        .xterm {
+            width: 100%;
+            height: 100%;
+        }
+
+        .xterm-screen {
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+<div id="terminal-container"></div>
+
+<script>
+    (function () {
+        let term = null;
+        let fitAddon = null;
+        let inputCallback = null;
+        let pendingBytes = [];
+
+        function getFitAddon() {
+            if (typeof FitAddon !== 'undefined') return FitAddon;
+            if (typeof window.FitAddon !== 'undefined') return window.FitAddon;
+            if (typeof xtermAddonFit !== 'undefined' && xtermAddonFit.FitAddon) return xtermAddonFit.FitAddon;
+            return null;
+        }
+
+        class SimpleFitAddon {
+            constructor() {
+                this.name = 'fit';
+            }
+
+            activate(terminal) {
+                this._terminal = terminal;
+            }
+
+            fit() {
+                if (!this._terminal) return;
+                const parent = this._terminal.element.parentElement;
+                if (!parent) return;
+                const rect = parent.getBoundingClientRect();
+                const cols = Math.max(40, Math.floor(rect.width / 9));
+                const rows = Math.max(12, Math.floor(rect.height / 20));
+                if (cols > 0 && rows > 0) {
+                    try {
+                        this._terminal.resize(cols, rows);
+                    } catch (e) {
+                    }
+                }
+            }
+        }
+
+        function writeByteToTerminal(byteValue) {
+            if (!term) {
+                pendingBytes.push(byteValue & 0xFF);
+                return;
+            }
+            try {
+                const uint8Arr = new Uint8Array([byteValue & 0xFF]);
+                term.write(uint8Arr);
+            } catch (e) {
+            }
+        }
+
+        function flushPendingBytes() {
+            if (pendingBytes.length > 0 && term) {
+                const bytes = new Uint8Array(pendingBytes);
+                term.write(bytes);
+                pendingBytes = [];
+            }
+        }
+
+        window.write = function (data) {
+            let byteVal;
+            if (typeof data === 'number') {
+                byteVal = Math.floor(data) & 0xFF;
+            } else if (typeof data === 'string') {
+                byteVal = data.charCodeAt(0) & 0xFF;
+            } else {
+                byteVal = 0;
+            }
+            writeByteToTerminal(byteVal);
+        };
+
+        window.writeBytes = function (byteArray) {
+            if (!term) {
+                for (let i = 0; i < byteArray.length; i++) {
+                    pendingBytes.push(byteArray[i] & 0xFF);
+                }
+                return;
+            }
+            try {
+                const uint8Arr = new Uint8Array(byteArray);
+                term.write(uint8Arr);
+            } catch (e) {
+            }
+        };
+
+        window.writeString = function (str) {
+            if (!term) {
+                for (let i = 0; i < str.length; i++) {
+                    pendingBytes.push(str.charCodeAt(i) & 0xFF);
+                }
+                return;
+            }
+            try {
+                term.write(str);
+            } catch (e) {
+            }
+        };
+
+        window.onInput = function (callback) {
+            if (typeof callback === 'function') {
+                inputCallback = callback;
+                return true;
+            }
+            return false;
+        };
+
+        window.clearTerminal = function () {
+            if (term) {
+                term.clear();
+            }
+        };
+
+        window.resizeTerminal = function (rows, cols) {
+            if (term && rows > 0 && cols > 0) {
+                term.resize(cols, rows);
+                if (fitAddon && fitAddon.fit) {
+                    try {
+                        fitAddon.fit();
+                    } catch (e) {
+                    }
+                }
+            }
+        };
+
+        window.isTerminalReady = function () {
+            return term !== null && term !== undefined;
+        };
+
+        window.removeInputCallback = function () {
+            inputCallback = null;
+        };
+
+        window.getTerminalStatus = function () {
+            return {
+                ready: !!term,
+                rows: term ? term.rows : 0,
+                cols: term ? term.cols : 0,
+                hasCallback: !!inputCallback,
+                pendingBytes: pendingBytes.length
+            };
+        };
+
+        function initTerminal() {
+            try {
+                if (typeof Terminal === 'undefined') {
+                    throw new Error("Terminal not loaded");
+                }
+
+                const container = document.getElementById('terminal-container');
+                if (!container) {
+                    throw new Error("Container not found");
+                }
+
+                const FitAddonClass = getFitAddon();
+
+                const css = getComputedStyle(document.documentElement)
+                term = new Terminal({
+                    cursorBlink: true,
+                    cursorStyle: 'bar',
+                    scrollback: 1000,
+                    tabStopWidth: 4,
+                    bellStyle: 'none',
+                    fontFamily: css.getPropertyValue('--terminal-font-family').trim(),
+                    fontSize: css.getPropertyValue('--terminal-font-size').trim(),
+                    lineHeight: 1.2,
+                    letterSpacing: 0,
+                    theme: {
+                        background: css.getPropertyValue('--terminal-bg').trim(),
+                        foreground: css.getPropertyValue('--terminal-fg').trim(),
+                        cursor: css.getPropertyValue('--terminal-cursor').trim(),
+                        selection: css.getPropertyValue('--terminal-selection').trim(),
+                        black: css.getPropertyValue('--terminal-black').trim(),
+                        red: css.getPropertyValue('--terminal-red').trim(),
+                        green: css.getPropertyValue('--terminal-green').trim(),
+                        yellow: css.getPropertyValue('--terminal-yellow').trim(),
+                        blue: css.getPropertyValue('--terminal-blue').trim(),
+                        magenta: css.getPropertyValue('--terminal-magenta').trim(),
+                        cyan: css.getPropertyValue('--terminal-cyan').trim(),
+                        white: css.getPropertyValue('--terminal-white').trim(),
+                        brightBlack: css.getPropertyValue('--terminal-bright-black').trim(),
+                        brightRed: css.getPropertyValue('--terminal-bright-red').trim(),
+                        brightGreen: css.getPropertyValue('--terminal-bright-green').trim(),
+                        brightYellow: css.getPropertyValue('--terminal-bright-yellow').trim(),
+                        brightBlue: css.getPropertyValue('--terminal-bright-blue').trim(),
+                        brightMagenta: css.getPropertyValue('--terminal-bright-magenta').trim(),
+                        brightCyan: css.getPropertyValue('--terminal-bright-cyan').trim(),
+                        brightWhite: css.getPropertyValue('--terminal-bright-white').trim()
+                    },
+                    convertEol: true,
+                    disableStdin: false,
+                    allowProposedApi: true,
+                    rows: 24,
+                    cols: 80
+                });
+
+                if (FitAddonClass) {
+                    try {
+                        fitAddon = new FitAddonClass();
+                        term.loadAddon(fitAddon);
+                    } catch (e) {
+                        fitAddon = null;
+                    }
+                }
+
+                if (!fitAddon) {
+                    fitAddon = new SimpleFitAddon();
+                    try {
+                        term.loadAddon(fitAddon);
+                    } catch (e) {
+                        fitAddon = null;
+                    }
+                }
+
+                term.open(container);
+
+                setTimeout(() => {
+                    if (fitAddon && fitAddon.fit) {
+                        try {
+                            fitAddon.fit();
+                        } catch (e) {
+                            const rect = container.getBoundingClientRect();
+                            const cols = Math.max(40, Math.floor(rect.width / 9));
+                            const rows = Math.max(12, Math.floor(rect.height / 20));
+                            term.resize(cols, rows);
+                        }
+                    } else {
+                        const rect = container.getBoundingClientRect();
+                        const cols = Math.max(40, Math.floor(rect.width / 9));
+                        const rows = Math.max(12, Math.floor(rect.height / 20));
+                        term.resize(cols, rows);
+                    }
+                }, 100);
+
+                window.addEventListener('resize', () => {
+                    if (fitAddon && fitAddon.fit) {
+                        try {
+                            fitAddon.fit();
+                        } catch (e) {
+                            const rect = container.getBoundingClientRect();
+                            const cols = Math.max(40, Math.floor(rect.width / 9));
+                            const rows = Math.max(12, Math.floor(rect.height / 20));
+                            if (term) term.resize(cols, rows);
+                        }
+                    } else if (term) {
+                        const rect = container.getBoundingClientRect();
+                        const cols = Math.max(40, Math.floor(rect.width / 9));
+                        const rows = Math.max(12, Math.floor(rect.height / 20));
+                        term.resize(cols, rows);
+                    }
+                });
+
+                term.onData((data) => {
+                    if (inputCallback) {
+                        try {
+                            inputCallback(data);
+                        } catch (e) {
+                        }
+                    }
+                });
+
+                setTimeout(() => {
+                    term.focus();
+                }, 200);
+
+                flushPendingBytes();
+
+            } catch (error) {
+                const container = document.getElementById('terminal-container');
+                if (container) {
+                    container.innerHTML = '';
+                }
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initTerminal);
+        } else {
+            initTerminal();
+        }
+    })();
+</script>
+</body>
+</html>
