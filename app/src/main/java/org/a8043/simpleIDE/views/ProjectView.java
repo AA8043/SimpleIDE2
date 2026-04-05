@@ -154,6 +154,8 @@ public class ProjectView {
             return;
         }
 
+        editor.saveFiles();
+
         Tab tab = new Tab("运行: " + runnable.getName());
         Runner runner = runnable.createRunner(tab);
 

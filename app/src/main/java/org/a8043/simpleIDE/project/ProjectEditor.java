@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.project;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.json.JSONObject;
 import com.github.javaparser.JavaParser;
@@ -9,6 +10,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
+import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.buildTool.BuildTool;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.project.index.Index;
@@ -39,6 +41,7 @@ public class ProjectEditor implements Closeable {
     private final List<RunnableTask> runnableList = new ArrayList<>();
     private final List<FileAlterationListener> fileListenerList = new ArrayList<>();
     private final FileAlterationMonitor fileMonitor;
+    private final List<ControllableFile> openedFileList = new ArrayList<>();
 
     public ProjectEditor(Project project) {
         this.project = project;
@@ -83,6 +86,13 @@ public class ProjectEditor implements Closeable {
                 log.error(e.getMessage(), e);
             }
         });
+
+        new Thread(() -> {
+            while (true) {
+                ThreadUtil.sleep(Main.instance.getSettings().getAutoSaveInterval());
+                saveFiles();
+            }
+        }).start();
 
         FileAlterationObserver fileObserver = new FileAlterationObserver(project.getProjectDir());
         fileObserver.addListener(new FileAlterationListenerAdaptor() {
@@ -133,13 +143,30 @@ public class ProjectEditor implements Closeable {
         fileListenerList.add(listener);
     }
 
+    public ControllableFile openFile(File file, String content) {
+        ControllableFile controllableFile = new ControllableFile(file, content);
+        controllableFile.read();
+        openedFileList.add(controllableFile);
+        return controllableFile;
+    }
+
+    public void closeFile(ControllableFile controllableFile) {
+        controllableFile.write();
+        openedFileList.remove(controllableFile);
+    }
+
     @SneakyThrows
     @Override
     public void close() {
         index.close();
         fileMonitor.stop();
         javaParserThreadLocal.remove();
+        saveFiles();
         saveConfig();
+    }
+
+    public synchronized void saveFiles() {
+        openedFileList.forEach(ControllableFile::write);
     }
 
     private void saveConfig() {

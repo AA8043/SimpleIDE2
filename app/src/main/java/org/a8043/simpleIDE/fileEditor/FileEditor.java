@@ -19,10 +19,6 @@ public abstract class FileEditor {
         this.editor = editor;
     }
 
-    public final String read() {
-        return file.read();
-    }
-
     public final void setContent(String content) {
         file.setContent(content);
         onContentChanged();

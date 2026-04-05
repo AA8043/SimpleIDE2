@@ -17,6 +17,7 @@ import java.util.Locale;
     buildTool.gradle=settings.buildTool.gradle+settings.buildTool.gradle.description
     appearance=settings.appearance+settings.appearance.description
     index=settings.index+settings.index.description
+    editor=settings.editor+settings.editor.description
     """)
 public class Settings {
     @Item(value = "buildTool.maven.defaultPath", title = "settings.buildTool.defaultPath",
@@ -31,12 +32,15 @@ public class Settings {
     @Item(value = "index.#", title = "settings.index.threadCount",
         description = "settings.index.threadCount.description")
     private int indexThreadCount;
+    @Item(value = "editor.#", title = "settings.editor.autoSaveInterval",
+        description = "settings.editor.autoSaveInterval.description")
+    private int autoSaveInterval;
 
     public static Settings fromDefault() {
         return new Settings(new File("./maven"), new File("./gradle"),
             switch (Locale.getDefault().getLanguage()) {
                 case "zh" -> "zh_cn";
                 default -> "en_us";
-            }, 64);
+            }, 64, 3000);
     }
 }

@@ -83,7 +83,7 @@ public class WelcomeView {
     private void openSettingsModal() {
         FXMLLoader loader = new FXMLLoader(SettingsModal.FXML_URL);
         loader.setControllerFactory(clazz -> new SettingsModal(Main.instance.getSettings()));
-        Main.instance.showModal(loader.load(), 980, 570);
+        Main.instance.showModal("settings", loader.load(), 980, 570);
     }
 
     private static class ProjectBox extends HBox {

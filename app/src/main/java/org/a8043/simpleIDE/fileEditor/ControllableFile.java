@@ -21,7 +21,7 @@ public class ControllableFile {
         return content;
     }
 
-    public final void write() {
+    public void write() {
         if (file != null) {
             FileUtil.writeUtf8String(content, file);
         }

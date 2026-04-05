@@ -13,13 +13,11 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.MultipleSelectionModel;
-import javafx.scene.control.Tab;
+import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
@@ -31,6 +29,7 @@ import org.a8043.simpleIDE.fileEditor.*;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.Util;
+import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
 import org.markdown4j.Markdown4jProcessor;
@@ -38,10 +37,7 @@ import org.markdown4j.Markdown4jProcessor;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -79,13 +75,18 @@ public class FileTab {
         this.editor = editor;
         FileEditor fileEditor;
         boolean isFailedToOpen;
+        ControllableFile controllableFile = editor.openFile(file, content);
         try {
             fileEditor = FILE_TYPE_MAP.getOrDefault(fileType, FILE_TYPE_MAP.get("*"))
-                .create(new ControllableFile(file, content), editor);
+                .create(controllableFile, editor);
             isFailedToOpen = false;
         } catch (Exception e) {
-            fileEditor = new DefaultFile(new ControllableFile(file, content), editor);
             isFailedToOpen = true;
+            try {
+                fileEditor = FILE_TYPE_MAP.get("*").create(controllableFile, editor);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
         }
         this.fileEditor = fileEditor;
         this.isFailedToOpen = isFailedToOpen;
@@ -95,7 +96,7 @@ public class FileTab {
     public static Tab createTab(ProjectEditor editor, File file) {
         FXMLLoader fxmlLoader = new FXMLLoader(FXML_URL);
         fxmlLoader.setControllerFactory(param -> new FileTab(editor, file, null, FileUtil.getSuffix(file)));
-        return new FileTabTab(file, fxmlLoader.load());
+        return new FileTabTab(file, fxmlLoader.load(), fxmlLoader.getController());
     }
 
     @FXML
@@ -152,7 +153,7 @@ public class FileTab {
                 }
             }
         });
-        codeArea.replaceText(fileEditor.read());
+        codeArea.replaceText(fileEditor.getFile().read());
         codeArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
             AtomicBoolean showed = new AtomicBoolean(false);
             fileEditor.getProblemList().forEach(error -> {
@@ -165,6 +166,39 @@ public class FileTab {
             });
             if (!showed.get()) {
                 closeTip();
+            }
+        });
+
+        AtomicBoolean isAsking = new AtomicBoolean(false);
+        editor.addFileListener(new FileAlterationListenerAdaptor() {
+            @Override
+            public void onFileChange(File file) {
+                if (file.equals(fileEditor.getFile().getFile())) {
+                    String newContent = fileEditor.getFile().read();
+                    if (!Objects.equals(newContent, codeArea.getText()) && !isAsking.get()) {
+                        isAsking.set(true);
+                        Platform.runLater(() -> {
+                            Button rereadButton = new Button("fileExternalChange.reread");
+                            Button ignoreButton = new Button("fileExternalChange.ignore");
+                            Main.ModalController<VBox> modal = Main.instance.showModal("fileExternalChange",
+                                new VBox(new Label(ResourceManager.getText("fileExternalChange.description",
+                                    fileEditor.getFile().getFile().getName())),
+                                    new BorderPane(null, null, rereadButton,
+                                        null, ignoreButton)), 400, 200);
+                            modal.setOnClose(() -> isAsking.set(false));
+
+                            rereadButton.setOnAction(e -> {
+                                codeArea.replaceText(newContent);
+                                modal.close();
+                            });
+                            ignoreButton.setOnAction(e -> {
+                                fileEditor.getFile().setContent(codeArea.getText());
+                                fileEditor.getFile().write();
+                                modal.close();
+                            });
+                        });
+                    }
+                }
             }
         });
 
@@ -311,11 +345,12 @@ public class FileTab {
         private final File file;
         private final String name;
 
-        public FileTabTab(File file, Node node) {
+        public FileTabTab(File file, Node node, FileTab tab) {
             super(file.getName(), node);
             this.file = file;
             name = file.getName();
             setGraphic(Util.getFileImageView(file, 16, 16));
+            setOnClosed(e -> tab.editor.closeFile(tab.fileEditor.getFile()));
         }
     }
 
