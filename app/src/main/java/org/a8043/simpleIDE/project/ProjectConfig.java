@@ -22,6 +22,8 @@ import java.util.List;
 @ConfigClass
 public class ProjectConfig {
     @Item
+    private File jdkPath;
+    @Item
     private BuildToolType buildToolType;
     @Item
     private File buildToolPath;
@@ -39,7 +41,8 @@ public class ProjectConfig {
     public static ProjectConfig fromMaven(ProjectEditor editor) {
         File projectDir = editor.getProject().getProjectDir();
         Build build = ((Maven) editor.getBuildTool()).getModel().getBuild();
-        return new ProjectConfig(BuildToolType.MAVEN, Main.instance.getSettings().getDefaultMavenPath(),
+        return new ProjectConfig(new File(editor.getProject().getProjectDir(), "jdk"),
+            BuildToolType.MAVEN, Main.instance.getSettings().getDefaultMavenPath(),
             new File(projectDir, build.getSourceDirectory()),
             new File(projectDir, build.getTestSourceDirectory()),
             build.getResources().stream().map(resource -> new File(projectDir, resource.getDirectory())).toList(),
@@ -49,14 +52,16 @@ public class ProjectConfig {
     public static ProjectConfig fromGradle(ProjectEditor editor) {
         Gradle gradle = (Gradle) editor.getBuildTool();
         // TODO: 从gradle生成config
-        return new ProjectConfig(BuildToolType.GRADLE, Main.instance.getSettings().getDefaultGradlePath(),
+        return new ProjectConfig(new File(editor.getProject().getProjectDir(), "jdk"),
+            BuildToolType.GRADLE, Main.instance.getSettings().getDefaultGradlePath(),
             null, null, null, new ArrayList<>(), "");
     }
 
     public static ProjectConfig fromDefault(ProjectEditor editor) {
         Project project = editor.getProject();
         File projectDir = project.getProjectDir();
-        return new ProjectConfig(BuildToolType.UNKNOWN, null,
+        return new ProjectConfig(new File(editor.getProject().getProjectDir(), "jdk"),
+            BuildToolType.UNKNOWN, null,
             new File(projectDir, "src/main/java"),
             new File(projectDir, "src/test/java"),
             new ArrayList<>(Collections.singleton(new File(projectDir, "src/main/resources"))),

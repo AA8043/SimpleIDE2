@@ -3,6 +3,7 @@ package org.a8043.simpleIDE.project.buildTool;
 import cn.hutool.core.io.FileUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
@@ -92,5 +93,22 @@ public class Maven extends BuildTool {
 
             return new ModuleRecord(name, dir, model);
         }).toList();
+    }
+
+    public static class MavenType extends BuildToolType {
+        @Override
+        public String name() {
+            return "MAVEN";
+        }
+
+        @Override
+        public BuildTool newBuildTool(ProjectEditor editor) {
+            return new Maven(editor);
+        }
+
+        @Override
+        public boolean isUseThis(Project project) {
+            return new File(project.getProjectDir(), "pom.xml").exists();
+        }
     }
 }

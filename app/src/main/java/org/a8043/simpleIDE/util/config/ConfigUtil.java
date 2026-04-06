@@ -7,6 +7,8 @@ import cn.hutool.json.JSONObject;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -30,6 +32,12 @@ public class ConfigUtil {
                     value = new File(value.toString());
                 } else if (type.isEnum()) {
                     value = Enum.valueOf((Class<Enum>) type, value.toString());
+                } else {
+                    try {
+                        Method method = type.getMethod("getByName", String.class);
+                        value = method.invoke(null, value.toString());
+                    } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+                    }
                 }
             }
 
@@ -57,6 +65,12 @@ public class ConfigUtil {
                 value = file.getAbsolutePath();
             } else if (value instanceof Enum<?> anEnum) {
                 value = anEnum.name();
+            } else {
+                try {
+                    Method method = value.getClass().getMethod("name");
+                    value = method.invoke(value);
+                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignored) {
+                }
             }
 
             lastJson.set(path[path.length - 1], value);

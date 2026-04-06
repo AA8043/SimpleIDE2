@@ -1,29 +1,58 @@
 package org.a8043.simpleIDE.project.buildTool;
 
+import lombok.AllArgsConstructor;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
 
-import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
-public enum BuildToolType {
-    MAVEN, GRADLE, UNKNOWN;
+@AllArgsConstructor
+public abstract class BuildToolType {
+    public static final BuildToolType MAVEN = new Maven.MavenType();
+    public static final BuildToolType GRADLE = new Gradle.GradleType();
+    public static final BuildToolType UNKNOWN = new UnknownType();
+    private static final List<BuildToolType> TYPE_LIST = new ArrayList<>();
 
-    public BuildTool newBuildTool(ProjectEditor editor) {
-        return switch (this) {
-            case MAVEN -> new Maven(editor);
-            case GRADLE -> new Gradle(editor);
-            case UNKNOWN -> null;
-        };
+    static {
+        register(MAVEN);
+        register(GRADLE);
+        register(UNKNOWN);
     }
 
+    public static void register(BuildToolType type) {
+        TYPE_LIST.add(type);
+    }
+
+    public static BuildToolType getByName(String name) {
+        return TYPE_LIST.stream().filter(type -> Objects.equals(type.name(), name)).findFirst().orElse(null);
+    }
+
+    public abstract String name();
+
+    public abstract BuildTool newBuildTool(ProjectEditor editor);
+
+    public abstract boolean isUseThis(Project project);
+
     public static BuildToolType recognition(Project project) {
-        File projectDir = project.getProjectDir();
-        if (new File(projectDir, "pom.xml").exists()) {
-            return MAVEN;
-        } else if (new File(projectDir, "build.gradle").exists()) {
-            return GRADLE;
-        } else {
-            return UNKNOWN;
+        return TYPE_LIST.stream().filter(type -> type.isUseThis(project)).findFirst().orElse(UNKNOWN);
+    }
+
+    public static class UnknownType extends BuildToolType {
+        @Override
+        public String name() {
+            return "UNKNOWN";
+        }
+
+        @Override
+        public BuildTool newBuildTool(ProjectEditor editor) {
+            return null;
+        }
+
+        @Override
+        public boolean isUseThis(Project project) {
+            return false;
         }
     }
 }

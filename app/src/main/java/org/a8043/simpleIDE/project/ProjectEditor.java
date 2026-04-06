@@ -45,10 +45,6 @@ public class ProjectEditor implements Closeable {
 
     public ProjectEditor(Project project) {
         this.project = project;
-        jdk = Jdk.getJdk(project.getJdkPath());
-        index = new Index(this);
-        javaParserThreadLocal = ThreadLocal.withInitial(() -> new JavaParser(new ParserConfiguration()
-            .setLanguageLevel(jdk.getLanguageLevel()).setCharacterEncoding(StandardCharsets.UTF_8)));
 
         configDir = new File(project.getProjectDir(), ".simpleIDE");
         if (!configDir.exists() && !configDir.mkdir()) {
@@ -86,6 +82,11 @@ public class ProjectEditor implements Closeable {
                 log.error(e.getMessage(), e);
             }
         });
+
+        jdk = Jdk.getJdk(config.getJdkPath());
+        index = new Index(this);
+        javaParserThreadLocal = ThreadLocal.withInitial(() -> new JavaParser(new ParserConfiguration()
+            .setLanguageLevel(jdk.getLanguageLevel()).setCharacterEncoding(StandardCharsets.UTF_8)));
 
         new Thread(() -> {
             while (true) {

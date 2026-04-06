@@ -12,9 +12,9 @@ import java.util.Locale;
 @Getter
 @Setter
 @ConfigClass(nodesName = """
-    buildTool=settings.buildTool+settings.buildTool.description
-    buildTool.maven=settings.buildTool.maven+settings.buildTool.maven.description
-    buildTool.gradle=settings.buildTool.gradle+settings.buildTool.gradle.description
+    buildTool=buildTool+settings.buildTool.description
+    buildTool.maven=buildTool.maven+settings.buildTool.maven.description
+    buildTool.gradle=buildTool.gradle+settings.buildTool.gradle.description
     appearance=settings.appearance+settings.appearance.description
     index=settings.index+settings.index.description
     editor=settings.editor+settings.editor.description

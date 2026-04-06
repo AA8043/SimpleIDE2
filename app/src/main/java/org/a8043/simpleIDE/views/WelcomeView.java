@@ -48,8 +48,7 @@ public class WelcomeView {
             List<Project> projectList = new ArrayList<>();
             Main.instance.getRecordJson().getJSONArray("projects").forEach(projectJsonObject -> {
                 JSONObject projectJson = (JSONObject) projectJsonObject;
-                projectList.add(new Project(projectJson.getStr("name"),
-                    new File(projectJson.getStr("path")), new File(projectJson.getStr("jdkPath"))));
+                projectList.add(new Project(projectJson.getStr("name"), new File(projectJson.getStr("path"))));
             });
             Platform.runLater(() -> {
                 projectsBox.getChildren().clear();
@@ -84,6 +83,14 @@ public class WelcomeView {
         FXMLLoader loader = new FXMLLoader(SettingsModal.FXML_URL);
         loader.setControllerFactory(clazz -> new SettingsModal(Main.instance.getSettings()));
         Main.instance.showModal("settings", loader.load(), 980, 570);
+    }
+
+    @SneakyThrows
+    @FXML
+    private void openNewProjectModal() {
+        FXMLLoader loader = new FXMLLoader(NewProjectModal.FXML_URL);
+        loader.setControllerFactory(clazz -> new NewProjectModal());
+        Main.instance.showModal("welcome.newProject", loader.load(), 980, 570);
     }
 
     private static class ProjectBox extends HBox {

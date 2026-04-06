@@ -8,12 +8,10 @@ import java.io.File;
 public class Project {
     private final String name;
     private final File projectDir;
-    private final File jdkPath;
 
-    public Project(String name, File projectDir, File jdkPath) {
+    public Project(String name, File projectDir) {
         this.name = name;
         this.projectDir = projectDir;
-        this.jdkPath = jdkPath;
     }
 
     public ProjectEditor open() {
