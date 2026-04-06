@@ -45,6 +45,10 @@ public class JavaRunnable extends RunnableTask {
             tab = fxmlLoader.getController();
         }
 
+        public String getRunClass() {
+            return runClass;
+        }
+
         @SneakyThrows
         @Override
         public void run() {
