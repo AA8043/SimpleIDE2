@@ -45,7 +45,7 @@ configurations.all {
     }
 }
 
-val javafxVersion = "21.0.4"
+val javafxVersion = javafx.version
 val osName = System.getProperty("os.name").lowercase()
 val javafxPlatform = when {
     osName.contains("win") -> "win"
@@ -61,7 +61,8 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.javaparser:javaparser-core:3.27.1")
+
+implementation("com.github.javaparser:javaparser-core:3.27.1")
     implementation("org.benf:cfr:0.152")
     implementation("org.apache.maven.shared:maven-invoker:3.3.0")
     implementation("org.apache.maven:maven-model:3.9.11")
@@ -82,13 +83,11 @@ dependencies {
     implementation("cn.hutool:hutool-all:5.8.38")
     implementation("com.pivovarit:parallel-collectors:4.0.0")
     implementation("org.commonjava.googlecode.markdown4j:markdown4j:2.2-cj-1.1")
-    implementation("org.jetbrains.kotlin:kotlin-scripting-jsr223:2.3.10")
 
     compileOnly("org.projectlombok:lombok:1.18.30")
     annotationProcessor("org.projectlombok:lombok:1.18.30")
     testCompileOnly("org.projectlombok:lombok:1.18.30")
     testAnnotationProcessor("org.projectlombok:lombok:1.18.30")
-    implementation("org.jetbrains:annotations:26.1.0")
     testImplementation("junit:junit:4.13.1")
 }
 

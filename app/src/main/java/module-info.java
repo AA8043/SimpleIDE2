@@ -26,7 +26,6 @@ module SimpleIDE.main {
 
     requires static lombok;
     requires cfr;
-    requires org.jetbrains.annotations;
     requires jdk.jdi;
 
     exports org.a8043.simpleIDE;
