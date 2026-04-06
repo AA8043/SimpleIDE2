@@ -12,6 +12,9 @@
         "type": "类型",
         "other": "其他",
         "none": "无",
+        "add": "添加",
+        "class": "类",
+        "line": "行",
         "access": "访问权限",
         "access.public": "公开",
         "access.private": "私有",
@@ -53,6 +56,8 @@
         "runner.debugger.suspend": "暂停",
         "runner.debugger.resume": "恢复",
         "runner.debugger.varModal.title": "变量 {}",
-        "runner.debugger.varModal.viewer.string": "字符串查看器"
+        "runner.debugger.varModal.viewer.string": "字符串查看器",
+        "runner.debugger.breakpoint": "断点",
+        "runner.debugger.breakpoint.hitTip": "命中断点: {}"
     }
 }

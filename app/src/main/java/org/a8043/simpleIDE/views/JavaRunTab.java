@@ -6,8 +6,15 @@ import com.sun.jdi.*;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector;
 import com.sun.jdi.connect.IllegalConnectorArgumentsException;
+import com.sun.jdi.event.BreakpointEvent;
+import com.sun.jdi.event.Event;
+import com.sun.jdi.event.EventQueue;
+import com.sun.jdi.event.EventSet;
+import com.sun.jdi.request.BreakpointRequest;
+import com.sun.jdi.request.EventRequestManager;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Worker;
 import javafx.fxml.FXML;
@@ -15,6 +22,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
@@ -31,9 +39,11 @@ import org.a8043.simpleIDE.util.Util;
 import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 public class JavaRunTab {
     public static final URL FXML_URL = ResourceUtil.getResource("JavaRunTab.fxml", JavaRunTab.class);
@@ -111,6 +121,7 @@ public class JavaRunTab {
 
     private class Debugger extends BorderPane {
         private VirtualMachine vm;
+        private EventRequestManager erm;
 
         @SneakyThrows
         public Debugger() {
@@ -130,12 +141,28 @@ public class JavaRunTab {
                 writeToTerminal(ResourceManager.getText("runner.debugger.connectedTip",
                     runner.getDebugPort()) + "\n");
                 vm.resume();
+                erm = vm.eventRequestManager();
 
                 Platform.runLater(() -> {
-                    ComboBox<ThreadReference> threadComboBox = new ComboBox<>();
+                    AtomicReference<StackFrame> currentFrame = new AtomicReference<>();
+                    ObservableList<BreakpointRequest> breakpointList = FXCollections.observableArrayList();
+                    Map<BreakpointRequest, String> breakpointRequestClassMap = new HashMap<>();
                     ObservableList<StackFrame> frameList = FXCollections.observableArrayList();
                     ObservableList<Object> contentList = FXCollections.observableArrayList();
 
+                    breakpointList.addListener((ListChangeListener<BreakpointRequest>) change -> {
+                        while (change.next()) {
+                            if (change.wasRemoved()) {
+                                for (BreakpointRequest bp : change.getRemoved()) {
+                                    bp.disable();
+                                    erm.deleteEventRequest(bp);
+                                    breakpointRequestClassMap.remove(bp);
+                                }
+                            }
+                        }
+                    });
+
+                    ComboBox<ThreadReference> threadComboBox = new ComboBox<>();
                     Callback<ListView<ThreadReference>, ListCell<ThreadReference>> threadCell =
                         Util.createListCell(thread -> new Label(thread.name() + " (#" + thread.uniqueID() + ")"));
                     threadComboBox.setCellFactory(threadCell);
@@ -152,29 +179,127 @@ public class JavaRunTab {
                         }
                     });
 
-                    setTop(new HBox(new Button("runner.debugger.suspend") {
+                    class SuspendButton extends Button {
                         private boolean isPaused;
 
                         {
+                            setText("runner.debugger.suspend");
                             setOnAction(e -> {
                                 if (isPaused = !isPaused) {
                                     vm.suspend();
-                                    setText("runner.debugger.resume");
-                                    threadComboBox.getItems().addAll(vm.allThreads());
-                                    threadComboBox.getSelectionModel().selectFirst();
                                 } else {
                                     vm.resume();
-                                    setText("runner.debugger.suspend");
-                                    threadComboBox.getItems().clear();
-                                    threadComboBox.getSelectionModel().clearSelection();
-                                    frameList.clear();
-                                    contentList.clear();
                                 }
+                                refresh();
                             });
                         }
-                    }));
 
-                    AtomicReference<StackFrame> currentFrame = new AtomicReference<>();
+                        public void refresh() {
+                            if (isPaused) {
+                                setText("runner.debugger.resume");
+                                threadComboBox.getItems().setAll(vm.allThreads());
+                                threadComboBox.getSelectionModel().selectFirst();
+                            } else {
+                                setText("runner.debugger.suspend");
+                                threadComboBox.getItems().clear();
+                                threadComboBox.getSelectionModel().clearSelection();
+                                frameList.clear();
+                                contentList.clear();
+                            }
+                        }
+                    }
+                    SuspendButton suspendButton = new SuspendButton();
+                    new Thread(() -> {
+                        EventQueue eventQueue = vm.eventQueue();
+                        while (true) {
+                            try {
+                                EventSet eventSet = eventQueue.remove();
+                                for (Event event : eventSet) {
+                                    if (event instanceof BreakpointEvent breakpointEvent) {
+                                        Location location = breakpointEvent.location();
+                                        writelnToTerminal(ResourceManager.getText("runner.debugger.breakpoint.hitTip",
+                                            location.sourceName() + ":" + location.lineNumber()));
+                                        Platform.runLater(() -> {
+                                            suspendButton.isPaused = true;
+                                            suspendButton.refresh();
+                                        });
+                                    }
+                                }
+                            } catch (InterruptedException | AbsentInformationException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }).start();
+
+                    setTop(new HBox(suspendButton, new Button("runner.debugger.breakpoint") {{
+                        setOnAction(e -> {
+                            @lombok.Value
+                            class BreakpointInfo {
+                                String clazz;
+                                int line;
+                            }
+                            Function<BreakpointInfo, BreakpointRequest> newBreakpoint = info -> {
+                                ReferenceType type = vm.classesByName(info.getClazz()).getFirst();
+                                BreakpointRequest newBp;
+                                try {
+                                    newBp = erm.createBreakpointRequest(type.locationsOfLine(info.getLine()).getFirst());
+                                } catch (AbsentInformationException ex) {
+                                    throw new RuntimeException(ex);
+                                }
+                                newBp.enable();
+                                breakpointList.add(newBp);
+                                breakpointRequestClassMap.put(newBp, info.getClazz());
+                                return newBp;
+                            };
+                            BorderPane rightPane = new BorderPane();
+                            Main.instance.showModal("runner.debugger.breakpoint",
+                                new SplitPane(new VBox(new Button("add") {{
+                                    setOnAction(e -> {
+                                        for (int i = 1; i < 100; i++) {
+                                            try {
+                                                newBreakpoint.apply(new BreakpointInfo(runner.getRunClass(), i));
+                                                break;
+                                            } catch (Exception ignored) {
+                                            }
+                                        }
+                                    });
+                                }}, new ListView<>(breakpointList) {{
+                                    setCellFactory(Util.createListCell(breakpoint -> {
+                                        Location loc = breakpoint.location();
+                                        try {
+                                            return new Label(loc.sourceName() + ":" + loc.lineNumber());
+                                        } catch (AbsentInformationException ex) {
+                                            throw new RuntimeException(ex);
+                                        }
+                                    }));
+                                    getSelectionModel().selectedItemProperty().addListener(
+                                        (obs, old, breakpoint) -> {
+                                            if (breakpoint != null) {
+                                                TextField classField = new TextField();
+                                                TextField lineField = new TextField();
+                                                Location loc = breakpoint.location();
+                                                classField.setText(breakpointRequestClassMap.get(breakpoint));
+                                                lineField.setText(String.valueOf(loc.lineNumber()));
+                                                rightPane.setCenter(new GridPane(2, 2) {{
+                                                    addRow(0, new Label("class"), classField);
+                                                    addRow(1, new Label("line"), lineField);
+                                                }});
+                                                Runnable add = () -> {
+                                                    breakpointList.remove(breakpoint);
+                                                    getSelectionModel().select(newBreakpoint.apply(
+                                                        new BreakpointInfo(classField.getText(),
+                                                            Integer.parseInt(lineField.getText()))));
+                                                };
+                                                classField.textProperty().addListener((obs1, old1, newValue) ->
+                                                    add.run());
+                                                lineField.textProperty().addListener((obs1, old1, newValue) ->
+                                                    add.run());
+                                            }
+                                        });
+                                }}), rightPane), 600, 400);
+                        });
+                    }}));
+
                     setCenter(new SplitPane(new BorderPane(null,
                         threadComboBox, null, new ListView<>(frameList) {{
                         getSelectionModel().selectedItemProperty().addListener((obs, oldVal, frame) -> {
@@ -196,8 +321,7 @@ public class JavaRunTab {
                             } catch (AbsentInformationException e) {
                                 throw new RuntimeException(e);
                             }
-                            return new VBox(new Label(
-                                name + ":" + location.lineNumber()) {{
+                            return new VBox(new Label(name + ":" + location.lineNumber()) {{
                                 getStyleClass().add("not-important");
                             }}, new Label(location.method().name()) {{
                                 setFont(new Font(12));
