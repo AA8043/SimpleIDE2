@@ -56,10 +56,9 @@ public class ProjectEditor implements Closeable {
 
         configFile = new File(configDir, "editor.json");
         if (!configFile.exists()) {
-            if (new File(project.getProjectDir(), "pom.xml").exists()) {
+            if (BuildToolType.MAVEN.isUseThis(project)) {
                 config = ProjectConfig.fromMaven(this);
-            } else if (new File(project.getProjectDir(), "build.gradle").exists() ||
-                       new File(project.getProjectDir(), "build.gradle.kts").exists()) {
+            } else if (BuildToolType.GRADLE.isUseThis(project)) {
                 config = ProjectConfig.fromGradle(this);
             } else {
                 config = ProjectConfig.fromDefault(this);

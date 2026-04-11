@@ -1,5 +1,6 @@
 package org.a8043.simpleIDE.project.buildTool;
 
+import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
 
@@ -35,6 +36,10 @@ public class Gradle extends BuildTool {
         @Override
         public String name() {
             return "GRADLE";
+        }
+
+        @Override
+        public void generateBuildScript(Project project, Jdk jdk, String groupId, String artifactId) {
         }
 
         @Override

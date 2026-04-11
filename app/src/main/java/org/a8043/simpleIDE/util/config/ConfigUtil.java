@@ -65,7 +65,7 @@ public class ConfigUtil {
                 value = file.getAbsolutePath();
             } else if (value instanceof Enum<?> anEnum) {
                 value = anEnum.name();
-            } else {
+            } else if (value != null) {
                 try {
                     Method method = value.getClass().getMethod("name");
                     value = method.invoke(value);

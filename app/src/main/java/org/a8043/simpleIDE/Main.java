@@ -23,6 +23,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.config.ConfigUtil;
 import org.a8043.simpleIDE.views.LoadView;
@@ -121,9 +122,14 @@ public class Main extends Application {
         stepTipSetter.apply("正在读取record...");
         File recordJsonFile = new File("./record.json");
         if (!recordJsonFile.exists()) {
-            FileUtil.writeUtf8String(new JSONObject().set("projects", new JSONArray()).toString(), recordJsonFile);
+            FileUtil.writeUtf8String(new JSONObject().set("projects", new JSONArray())
+                .set("jdks", new JSONArray()).toString(), recordJsonFile);
         }
         recordJson = new JSONObject(FileUtil.readUtf8String(recordJsonFile));
+        recordJson.getJSONArray("jdks").forEach(v -> {
+            JSONObject json = (JSONObject) v;
+            Jdk.JDK_LIST.add(new Jdk(new File(json.getStr("path")), json.getStr("version")));
+        });
 
         stepTipSetter.apply("正在读取settings...");
         File settingsJsonFile = new File("./settings.json");

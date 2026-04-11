@@ -1,7 +1,10 @@
 package org.a8043.simpleIDE.project;
 
 import cn.hutool.json.JSONObject;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.project.buildTool.Gradle;
@@ -15,7 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter

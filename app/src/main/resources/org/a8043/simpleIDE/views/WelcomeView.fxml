@@ -19,8 +19,8 @@
                 <Button mnemonicParsing="false" onAction="#search" prefHeight="29.0" prefWidth="70.0" text="search"/>
             </children>
         </HBox>
-        <Button layoutX="895.2" layoutY="3.0" mnemonicParsing="false" prefHeight="38.0" prefWidth="90.0"
-                text="welcome.newProject" AnchorPane.rightAnchor="8.0" AnchorPane.topAnchor="8.0"/>
+        <Button layoutX="895.2" layoutY="3.0" mnemonicParsing="false" onAction="#openNewProjectModal" prefHeight="38.0"
+                prefWidth="90.0" text="welcome.newProject" AnchorPane.rightAnchor="8.0" AnchorPane.topAnchor="8.0"/>
         <ScrollPane layoutX="3.200000047683716" layoutY="54.400001525878906" styleClass="island"
                     AnchorPane.bottomAnchor="3.0" AnchorPane.leftAnchor="3.0" AnchorPane.rightAnchor="3.0"
                     AnchorPane.topAnchor="54.0">

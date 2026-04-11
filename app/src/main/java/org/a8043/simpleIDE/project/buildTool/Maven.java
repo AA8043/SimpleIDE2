@@ -1,8 +1,10 @@
 package org.a8043.simpleIDE.project.buildTool;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.io.resource.ResourceUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.apache.maven.model.Model;
@@ -99,6 +101,15 @@ public class Maven extends BuildTool {
         @Override
         public String name() {
             return "MAVEN";
+        }
+
+        @Override
+        public void generateBuildScript(Project project, Jdk jdk, String groupId, String artifactId) {
+            String content = ResourceUtil.readUtf8Str("fileTemplates/mavenPom.xml")
+                .replace("{groupId}", groupId)
+                .replace("{artifactId}", artifactId)
+                .replace("{javaVersion}", jdk.getVersion().split("\\.")[0]);
+            FileUtil.writeUtf8String(content, new File(project.getProjectDir(), "pom.xml"));
         }
 
         @Override

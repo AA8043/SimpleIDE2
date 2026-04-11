@@ -29,6 +29,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public class WelcomeView {
@@ -41,22 +42,26 @@ public class WelcomeView {
 
     @FXML
     private void initialize() {
-        projectsBox.setAlignment(Pos.CENTER);
-        projectsBox.getChildren().add(ResourceManager.createImageView("loading", 64, 64));
+        new Thread(this::refresh).start();
+    }
 
-        new Thread(() -> {
-            List<Project> projectList = new ArrayList<>();
-            Main.instance.getRecordJson().getJSONArray("projects").forEach(projectJsonObject -> {
-                JSONObject projectJson = (JSONObject) projectJsonObject;
-                projectList.add(new Project(projectJson.getStr("name"), new File(projectJson.getStr("path"))));
-            });
-            Platform.runLater(() -> {
-                projectsBox.getChildren().clear();
-                projectsBox.setAlignment(Pos.TOP_LEFT);
-                projectBoxList.addAll(projectList.stream().map(ProjectBox::new).toList());
-                projectsBox.getChildren().addAll(projectBoxList);
-            });
-        }).start();
+    private void refresh() {
+        Platform.runLater(() -> {
+            projectsBox.getChildren().clear();
+            projectsBox.setAlignment(Pos.CENTER);
+            projectsBox.getChildren().add(ResourceManager.createImageView("loading", 64, 64));
+        });
+        List<Project> projectList = new ArrayList<>();
+        Main.instance.getRecordJson().getJSONArray("projects").forEach(projectJsonObject -> {
+            JSONObject projectJson = (JSONObject) projectJsonObject;
+            projectList.add(new Project(projectJson.getStr("name"), new File(projectJson.getStr("path"))));
+        });
+        Platform.runLater(() -> {
+            projectsBox.getChildren().clear();
+            projectsBox.setAlignment(Pos.TOP_LEFT);
+            projectBoxList.addAll(projectList.stream().map(ProjectBox::new).toList());
+            projectsBox.getChildren().addAll(projectBoxList);
+        });
     }
 
     @FXML
@@ -89,8 +94,12 @@ public class WelcomeView {
     @FXML
     private void openNewProjectModal() {
         FXMLLoader loader = new FXMLLoader(NewProjectModal.FXML_URL);
-        loader.setControllerFactory(clazz -> new NewProjectModal());
-        Main.instance.showModal("welcome.newProject", loader.load(), 980, 570);
+        AtomicReference<Main.ModalController<VBox>> modal = new AtomicReference<>();
+        loader.setControllerFactory(clazz -> new NewProjectModal(() -> {
+            modal.get().close();
+            refresh();
+        }));
+        modal.set(Main.instance.showModal("welcome.newProject", loader.load(), 980, 570));
     }
 
     private static class ProjectBox extends HBox {
