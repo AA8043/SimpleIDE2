@@ -4,6 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
 import lombok.Getter;
@@ -30,12 +31,15 @@ import java.util.List;
 @Slf4j
 @Getter
 public class ProjectEditor implements Closeable {
+    public static final List<ProjectEditor> OPENED_LIST = new ArrayList<>();
     private final Project project;
     private final Jdk jdk;
     private final Index index;
+    private ProjectModel projectModel;
     private final ThreadLocal<JavaParser> javaParserThreadLocal;
     private final File configDir;
     private final File configFile;
+    private final File modelFile;
     private final BuildTool buildTool;
     private final ProjectConfig config;
     private final List<RunnableTask> runnableList = new ArrayList<>();
@@ -45,6 +49,7 @@ public class ProjectEditor implements Closeable {
 
     public ProjectEditor(Project project) {
         this.project = project;
+        OPENED_LIST.add(this);
 
         configDir = new File(project.getProjectDir(), ".simpleIDE");
         if (!configDir.exists() && !configDir.mkdir()) {
@@ -86,6 +91,13 @@ public class ProjectEditor implements Closeable {
         index = new Index(this);
         javaParserThreadLocal = ThreadLocal.withInitial(() -> new JavaParser(new ParserConfiguration()
             .setLanguageLevel(jdk.getLanguageLevel()).setCharacterEncoding(StandardCharsets.UTF_8)));
+
+        modelFile = new File(configDir, "model.json");
+        if (modelFile.exists()) {
+            projectModel = JSONUtil.toBean(FileUtil.readUtf8String(modelFile), ProjectModel.class);
+        } else {
+            projectModel = buildTool.sync(this);
+        }
 
         new Thread(() -> {
             while (true) {
@@ -163,6 +175,7 @@ public class ProjectEditor implements Closeable {
         javaParserThreadLocal.remove();
         saveFiles();
         saveConfig();
+        OPENED_LIST.remove(this);
     }
 
     public synchronized void saveFiles() {
@@ -170,6 +183,7 @@ public class ProjectEditor implements Closeable {
     }
 
     private void saveConfig() {
+        FileUtil.writeUtf8String(new JSONObject(projectModel).toString(), modelFile);
         FileUtil.writeUtf8String(ConfigUtil.toJson(config).toString(), configFile);
     }
 }

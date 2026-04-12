@@ -10,6 +10,7 @@ import javafx.scene.control.Tab;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.buildTool.Dependency;
 import org.a8043.simpleIDE.views.JavaRunTab;
 
 import java.io.*;
@@ -67,7 +68,8 @@ public class JavaRunnable extends RunnableTask {
             List<String> classpathList = new ArrayList<>();
             classpathList.add(new File(getEditor().getProject().getProjectDir(),
                 "target/classes").getAbsolutePath());
-            getEditor().getBuildTool().getDependencyJars().forEach(jar -> classpathList.add(jar.getAbsolutePath()));
+            getEditor().getProjectModel().getDependencyList().stream().map(Dependency::getJarFile)
+                .toList().forEach(jar -> classpathList.add(jar.getAbsolutePath()));
             tab.writelnToTerminal("classpathList: " + classpathList);
             if (getOptionMap().get("debug")) {
                 debugPort = RandomUtil.randomInt(10000, 60000);

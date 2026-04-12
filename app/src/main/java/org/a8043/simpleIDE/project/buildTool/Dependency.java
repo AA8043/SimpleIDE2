@@ -1,8 +1,10 @@
 package org.a8043.simpleIDE.project.buildTool;
 
 import cn.hutool.core.util.ZipUtil;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.SneakyThrows;
-import lombok.Value;
 import org.benf.cfr.reader.api.CfrDriver;
 import org.benf.cfr.reader.api.OutputSinkFactory;
 
@@ -14,15 +16,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.zip.ZipFile;
 
-@Value
+@AllArgsConstructor
+@Getter
+@Setter
 public class Dependency {
     private static final File MAVEN_LOCAL_REPOSITORY = new File(System.getProperty("user.home"), ".m2/repository");
-    String groupId;
-    String artifactId;
-    String version;
-    String moduleName;
-    File jarFile;
-    File sourceJarFile;
+    private String groupId;
+    private String artifactId;
+    private String version;
+    private String moduleName;
+    private File jarFile;
+    private File sourceJarFile;
 
     public SourceZipGetter getSourceZip() {
         return new SourceZipGetter();

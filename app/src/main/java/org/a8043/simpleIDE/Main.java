@@ -1,6 +1,8 @@
 package org.a8043.simpleIDE;
 
 import animatefx.animation.FadeIn;
+import cn.hutool.core.convert.AbstractConverter;
+import cn.hutool.core.convert.ConverterRegistry;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.json.JSONArray;
@@ -24,6 +26,7 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.project.Jdk;
+import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.config.ConfigUtil;
 import org.a8043.simpleIDE.views.LoadView;
@@ -67,6 +70,16 @@ public class Main extends Application {
 
             @Override
             public void close() {
+            }
+        });
+
+        ConverterRegistry.getInstance().putCustom(File.class, new AbstractConverter<File>() {
+            @Override
+            protected File convertInternal(Object value) {
+                if (value instanceof String) {
+                    return new File((String) value);
+                }
+                return null;
             }
         });
     }
@@ -185,6 +198,13 @@ public class Main extends Application {
 
     @Override
     public void stop() throws Exception {
+        log.info("正在关闭项目...");
+        try {
+            ProjectEditor.OPENED_LIST.forEach(ProjectEditor::close);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+        }
+
         log.info("正在保存record和settings...");
         FileUtil.writeUtf8String(recordJson.toString(), new File("./record.json"));
         FileUtil.writeUtf8String(ConfigUtil.toJson(settings).toString(), new File("./settings.json"));

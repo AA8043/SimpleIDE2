@@ -31,6 +31,7 @@ import org.a8043.simpleIDE.util.Util;
 import org.fxmisc.richtext.model.StyleSpans;
 import org.fxmisc.richtext.model.StyleSpansBuilder;
 
+import java.io.File;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -45,7 +46,9 @@ public class JavaFile extends FileEditor {
     public JavaFile(ControllableFile file, ProjectEditor editor) {
         super(file, editor);
         // TODO: 模块、test目录
-        String relativePath = Util.getRelativePath(getEditor().getConfig().getSrcDir(), file.getFile());
+        File file1 = file.getFile();
+        String relativePath = Util.getRelativePath(Util.findFileDirInFolders(editor.getProjectModel().getSrcDirList(),
+            file1.getName()), file1);
         String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
         indexPoint = JavaUtil.resolveModuleByPath(getEditor().getIndex(), indexPoint, path)
             .getPackage(ArrayUtil.sub(path, 0, path.length - 1)).getPoints().stream()

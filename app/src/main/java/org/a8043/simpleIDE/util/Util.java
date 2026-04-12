@@ -17,7 +17,9 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -29,6 +31,16 @@ public class Util {
             return fullPath;
         }
         return fullPath.substring(basePath.length() + 1);
+    }
+
+    public static File findFileDirInFolders(List<File> srcDirList, String name) {
+        AtomicReference<File> result = new AtomicReference<>();
+        srcDirList.forEach(dir -> FileUtil.walkFiles(dir, file -> {
+            if (Objects.equals(file.getName(), name)) {
+                result.set(dir);
+            }
+        }));
+        return result.get();
     }
 
     private static final Map<String, javafx.scene.image.Image> FILE_IMAGE_CACHE = new HashMap<>();

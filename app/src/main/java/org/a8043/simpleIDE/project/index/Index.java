@@ -15,6 +15,7 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.ProjectModule;
 import org.a8043.simpleIDE.project.buildTool.Dependency;
 import org.a8043.simpleIDE.util.JavaUtil;
 import org.a8043.simpleIDE.util.Util;
@@ -62,7 +63,9 @@ public class Index implements Closeable {
     }
 
     public Module getModule(String name) {
-        return moduleList.stream().filter(m -> Objects.equals(m.getName(), name)).findFirst().orElse(null);
+        return moduleList.stream().filter(m -> m.getProjectModule() != null &&
+                                               Objects.equals(m.getProjectModule().getName(), name))
+            .findFirst().orElse(null);
     }
 
     public CompilationUnit getCompilationUnit(IndexPoint point) {
@@ -72,7 +75,7 @@ public class Index implements Closeable {
 
         Module module = point.getPkg().getModule();
         StringBuilder pathBuilder = new StringBuilder();
-        pathBuilder.append(module.getName()).append("/");
+        pathBuilder.append(module.getProjectModule().getName()).append("/");
         for (String aPath : point.getPkg().getPath()) {
             pathBuilder.append(aPath).append("/");
         }
@@ -84,7 +87,7 @@ public class Index implements Closeable {
         if ((zipEntry = (zipFile = standardLibraryZip).getEntry(pathString)) == null) {
             List<Dependency> equalsModuleDependencyList = new ArrayList<>();
             dependencyZipMap.forEach((dependency, zip) -> {
-                if (dependency.getModuleName().equals(module.getName())) {
+                if (dependency.getModuleName().equals(module.getProjectModule().getName())) {
                     equalsModuleDependencyList.add(dependency);
                 }
             });
@@ -171,33 +174,35 @@ public class Index implements Closeable {
         });
     }
 
-    private Module getOrCreateModule(String name, Module.Location location) {
-        Module module = getModule(name);
+    private Module getOrCreateModule(ProjectModule projectModule) {
+        Module module = getModule(projectModule.getName());
         if (module == null) {
-            moduleList.add(module = new Module(name, location, this));
+            moduleList.add(module = new Module(projectModule, this));
         }
         return module;
+    }
+
+    public ZipFile getStandardLibraryZip() {
+        return standardLibraryZip != null ? standardLibraryZip :
+            (standardLibraryZip = ZipUtil.toZipFile(editor.getJdk().getSrcFile(), StandardCharsets.UTF_8));
     }
 
     public void indexAll(Consumer<Integer> afterStatistics, Runnable afterIndexOne,
                          Runnable afterIndexAll, Consumer<Exception> onException) {
         try {
-            standardLibraryZip = ZipUtil.toZipFile(editor.getJdk().getSrcFile(), StandardCharsets.UTF_8);
+            getStandardLibraryZip();
         } catch (Exception e) {
             onException.accept(e);
         }
 
         Set<Module> moduleSet = new HashSet<>();
-        standardLibraryZip.stream().forEach(entry ->
-            moduleSet.add(getOrCreateModule(entry.getName().split("/")[0], Module.Location.JDK)));
-        editor.getBuildTool().getModuleList().forEach(module ->
-            moduleSet.add(getOrCreateModule(module.getName(), Module.Location.DEPENDENCY)));
+        editor.getProjectModel().getModuleList().forEach(module -> moduleSet.add(getOrCreateModule(module)));
         moduleSet.forEach(module -> {
             try {
                 String moduleInfoContent;
-                switch (module.getLocation()) {
+                switch (module.getProjectModule().getLocation()) {
                     case JDK -> moduleInfoContent = IoUtil.readUtf8(standardLibraryZip.getInputStream(
-                        standardLibraryZip.getEntry(module.getName() + "/module-info.java")));
+                        standardLibraryZip.getEntry(module.getProjectModule().getName() + "/module-info.java")));
                     default -> {
                         // TODO: 使用其他方法获取模块信息
                         return;
@@ -222,9 +227,8 @@ public class Index implements Closeable {
                 throw new RuntimeException(e);
             }
         });
-        editor.getBuildTool().getDependencyList().forEach(dependency -> {
-            dependencyZipMap.put(dependency, dependency.getSourceZip().waitFor());
-        });
+        editor.getProjectModel().getDependencyList().forEach(dependency ->
+            dependencyZipMap.put(dependency, dependency.getSourceZip().waitFor()));
 
         List<MethodIndexTemp> methodTempList = new ArrayList<>();
         List<FieldIndexTemp> fieldTempList = new ArrayList<>();
@@ -240,18 +244,18 @@ public class Index implements Closeable {
                     needList.add(new NeedIndex(moduleName, path, entry));
                 }
             });
-            File srcDir = editor.getConfig().getSrcDir();
-            String srcPath = srcDir.getAbsolutePath().replace("\\", "/");
-            FileUtil.walkFiles(srcDir, file -> {
-                if (file.getName().endsWith(".java")) {
-                    String filePath = file.getAbsolutePath().replace("\\", "/");
-                    String relativePath = filePath.substring(srcPath.length() + 1);
-                    String[] path = relativePath.substring(0,
-                        relativePath.length() - ".java".length()).split("/");
-                    // TODO: 项目模块名
-                    needList.add(new NeedIndex("project", path, file));
-                }
-            });
+            editor.getProjectModel().getModuleList().forEach(module -> module.getSrcDirList().forEach(srcDir -> {
+                String srcPath = srcDir.getAbsolutePath().replace("\\", "/");
+                FileUtil.walkFiles(srcDir, file -> {
+                    if (file.getName().endsWith(".java")) {
+                        String filePath = file.getAbsolutePath().replace("\\", "/");
+                        String relativePath = filePath.substring(srcPath.length() + 1);
+                        String[] path = relativePath.substring(0,
+                            relativePath.length() - ".java".length()).split("/");
+                        needList.add(new NeedIndex(module.getName(), path, file));
+                    }
+                });
+            }));
             int count = needList.size();
             log.debug("需要索引的数量: {}", count);
             afterStatistics.accept(count);

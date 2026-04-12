@@ -4,6 +4,7 @@ import cn.hutool.core.util.ArrayUtil;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
+import org.a8043.simpleIDE.project.ProjectModule;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,35 +15,26 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @ToString
 public class Module {
     @Getter
-    private final String name;
-    @Getter
-    private final Location location;
+    private ProjectModule projectModule;
     @Getter
     private final List<Module> requireList;
     @Getter
     private final List<Package> packageList = new CopyOnWriteArrayList<>();
     private final Index index;
 
-    private Module(String name, Location location, List<Module> requireList, Index index) {
-        this.name = name;
-        this.location = location;
+    private Module(ProjectModule projectModule, List<Module> requireList, Index index) {
+        this.projectModule = projectModule;
         this.requireList = requireList;
         this.index = index;
         packageList.add(new Package(index));
     }
 
     public Module(Index index) {
-        this(null, null, null, index);
+        this(null, null, index);
     }
 
-    public Module(String name, Location location, Index index) {
-        this(name, location, new ArrayList<>() {
-            @Override
-            public boolean add(Module module) {
-                System.out.println("add require module " + module.getName() + " to " + name);
-                return super.add(module);
-            }
-        }, index);
+    public Module(ProjectModule projectModule, Index index) {
+        this(projectModule, new ArrayList<>(), index);
     }
 
     void addRequire(Module module) {
@@ -95,10 +87,4 @@ public class Module {
         return packageList.stream().map(Package::getPoints).flatMap(List::stream).toList();
     }
 
-    public void load() {
-    }
-
-    public enum Location {
-        PROJECT, JDK, DEPENDENCY
-    }
 }

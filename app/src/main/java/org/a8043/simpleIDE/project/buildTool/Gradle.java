@@ -3,6 +3,7 @@ package org.a8043.simpleIDE.project.buildTool;
 import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.ProjectModel;
 
 import java.io.File;
 import java.util.List;
@@ -17,8 +18,8 @@ public class Gradle extends BuildTool {
     }
 
     @Override
-    public List<Dependency> doGetDependencyList() {
-        return List.of();
+    public ProjectModel sync(ProjectEditor editor) {
+        return null;
     }
 
     @Override
@@ -28,7 +29,7 @@ public class Gradle extends BuildTool {
     }
 
     @Override
-    public List<ModuleRecord> doGetModuleList() {
+    public List<ModuleRecord> getModuleList() {
         return List.of();
     }
 

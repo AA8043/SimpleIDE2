@@ -13,7 +13,6 @@ import org.a8043.simpleIDE.views.NewProjectModal;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 
 public class JavaProject implements NewProjectModal.ProjectType {
     @Override
@@ -36,11 +35,8 @@ public class JavaProject implements NewProjectModal.ProjectType {
         }
         File configDir = new File(projectDir, ".simpleIDE");
         FileUtil.writeUtf8String(ConfigUtil.toJson(new ProjectConfig(jdk.getPath(),
-            buildToolType, null,
-            new File(projectDir, "src/main/java"),
-            new File(projectDir, "src/test/java"),
-            new ArrayList<>(Collections.singleton(new File(projectDir, "src/main/resources"))),
-            new ArrayList<>(), "")).toString(), new File(configDir, "editor.json"));
+                buildToolType, null, new ArrayList<>(), "")).toString(),
+            new File(configDir, "editor.json"));
         buildToolType.generateBuildScript(project, jdk, groupId, artifactId);
     }
 
