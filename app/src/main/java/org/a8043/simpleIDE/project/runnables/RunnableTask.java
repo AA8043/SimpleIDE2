@@ -1,7 +1,7 @@
 package org.a8043.simpleIDE.project.runnables;
 
 import cn.hutool.json.JSONObject;
-import javafx.scene.control.Tab;
+import javafx.scene.Node;
 import lombok.AccessLevel;
 import lombok.Getter;
 import org.a8043.simpleIDE.project.ProjectEditor;
@@ -10,12 +10,26 @@ public abstract class RunnableTask {
     @Getter(AccessLevel.PROTECTED)
     private final ProjectEditor editor;
     @Getter
-    private final String name;
+    private final JSONObject json;
 
-    public RunnableTask(ProjectEditor editor, JSONObject json) {
+    protected RunnableTask(ProjectEditor editor, JSONObject json) {
         this.editor = editor;
-        name = json.getStr("name");
+        this.json = json;
     }
 
-    public abstract Runner createRunner(Tab tab);
+    public final String getName() {
+        return json != null ? json.getStr("name") : null;
+    }
+
+    public abstract Runner createRunner();
+
+    public abstract Node createManager();
+
+    private Node manager;
+
+    public Node getManager() {
+        return manager == null ? (manager = createManager()) : manager;
+    }
+
+    public abstract Node createListItem();
 }

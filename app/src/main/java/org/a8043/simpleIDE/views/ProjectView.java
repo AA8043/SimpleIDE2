@@ -4,6 +4,7 @@ import cn.hutool.core.io.resource.ResourceUtil;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -13,6 +14,7 @@ import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
+import lombok.SneakyThrows;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
@@ -40,7 +42,9 @@ public class ProjectView {
     @FXML
     private Tab fileManagerTab;
     @FXML
-    private ComboBox<Object> runnableBox;
+    private ComboBox<RunnableTask> runnableBox;
+    @FXML
+    private Button runnableManageButton;
     @FXML
     private Button runnableRunButton;
 
@@ -59,6 +63,7 @@ public class ProjectView {
 
         fileManagerTab.setGraphic(ResourceManager.createImageView("file", 16, 16));
         runnableRunButton.setGraphic(ResourceManager.createImageView("run", 16, 16));
+        runnableManageButton.setGraphic(ResourceManager.createImageView("class", 16, 16));
 
         editorTabPane.getTabs().addListener((ListChangeListener<? super Tab>) observable -> {
             if (observable.next() && observable.wasAdded()) {
@@ -106,16 +111,11 @@ public class ProjectView {
         addFileToTreeItem(projectDir, root);
         fileTreeView.setRoot(root);
 
-        Callback<ListView<Object>, ListCell<Object>> runnableBoxCellFactory = Util.createListCell(item -> {
-            if (item instanceof RunnableTask runnable) {
-                return new Label(runnable.getName());
-            } else {
-                return new Label(item.toString());
-            }
-        });
+        Callback<ListView<RunnableTask>, ListCell<RunnableTask>> runnableBoxCellFactory =
+            Util.createListCell(RunnableTask::createListItem);
         runnableBox.setCellFactory(runnableBoxCellFactory);
         runnableBox.setButtonCell(runnableBoxCellFactory.call(null));
-        runnableBox.getItems().addAll(editor.getRunnableList());
+        runnableBox.setItems(editor.getRunnableList());
     }
 
     private static void addFileToTreeItem(File lastFile, TreeItem<File> treeItem) {
@@ -146,9 +146,17 @@ public class ProjectView {
         }
     }
 
+    @SneakyThrows
+    @FXML
+    private void openRunnableManager() {
+        FXMLLoader loader = new FXMLLoader(RunnableManager.FXML_URL);
+        loader.setControllerFactory(clazz -> new RunnableManager(editor));
+        Main.instance.showModal("runnable.manager", loader.load(), 600, 400);
+    }
+
     @FXML
     private void runRunnable(MouseEvent event) {
-        RunnableTask runnable = (RunnableTask) runnableBox.getSelectionModel().getSelectedItem();
+        RunnableTask runnable = runnableBox.getSelectionModel().getSelectedItem();
         if (runnable == null) {
             Main.instance.showTipModal("没有选择可运行");
             return;
@@ -157,7 +165,8 @@ public class ProjectView {
         editor.saveFiles();
 
         Tab tab = new Tab("运行: " + runnable.getName());
-        Runner runner = runnable.createRunner(tab);
+        Runner runner = runnable.createRunner();
+        tab.setContent(runner.createContent());
 
         Runnable run = () -> {
             editorTabPane.getTabs().add(tab);

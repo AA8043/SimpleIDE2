@@ -6,11 +6,16 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
-import javafx.scene.control.Tab;
+import javafx.scene.Node;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.buildTool.Dependency;
+import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.views.JavaRunTab;
 
 import java.io.*;
@@ -18,7 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class JavaRunnable extends RunnableTask {
-    private final String runClass;
+    private String runClass;
 
     public JavaRunnable(ProjectEditor editor, JSONObject json) {
         super(editor, json);
@@ -26,28 +31,30 @@ public class JavaRunnable extends RunnableTask {
     }
 
     @Override
-    public Runner createRunner(Tab tab) {
-        return new JavaRunner(tab);
+    public Runner createRunner() {
+        return new JavaRunner();
     }
 
     public class JavaRunner extends Runner {
-        private final JavaRunTab tab;
+        private JavaRunTab tab;
         @Getter
         private int debugPort = -1;
         private Process process;
 
-        @SneakyThrows
-        public JavaRunner(Tab tab1) {
+        public JavaRunner() {
             getOptionMap().put("debug", false);
-
-            FXMLLoader fxmlLoader = new FXMLLoader(JavaRunTab.FXML_URL);
-            fxmlLoader.setControllerFactory(clazz -> new JavaRunTab(this));
-            tab1.setContent(fxmlLoader.load());
-            tab = fxmlLoader.getController();
         }
 
         public String getRunClass() {
             return runClass;
+        }
+
+        @SneakyThrows
+        @Override
+        public Node createContent() {
+            FXMLLoader fxmlLoader = new FXMLLoader(JavaRunTab.FXML_URL);
+            fxmlLoader.setControllerFactory(clazz -> tab = new JavaRunTab(this));
+            return fxmlLoader.load();
         }
 
         @SneakyThrows
@@ -112,6 +119,40 @@ public class JavaRunnable extends RunnableTask {
         @Override
         public void close() {
             process.destroy();
+        }
+    }
+
+    @Override
+    public Node createManager() {
+        return new GridPane(2, 2) {{
+            addRow(0, new Label("name"), new TextField(getName()) {{
+                textProperty().addListener((obs, old, newValue) -> getJson().set("name", newValue));
+            }});
+            addRow(1, new Label("class"), new TextField(runClass) {{
+                textProperty().addListener((obs, old, newValue) -> getJson().set("runClass", runClass = newValue));
+            }});
+        }};
+    }
+
+    @Override
+    public Node createListItem() {
+        return new HBox(ResourceManager.createImageView("class", 16, 16), new Label(getName()));
+    }
+
+    public static class Type extends RunnableType {
+        @Override
+        public String getName() {
+            return "java";
+        }
+
+        @Override
+        public String getDisplayName() {
+            return ResourceManager.getText("runnable.java");
+        }
+
+        @Override
+        public RunnableTask createTask(ProjectEditor editor, JSONObject json) {
+            return new JavaRunnable(editor, json);
         }
     }
 }

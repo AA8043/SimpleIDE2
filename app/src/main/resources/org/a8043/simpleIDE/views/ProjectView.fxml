@@ -2,8 +2,8 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<AnchorPane prefHeight="600.0" prefWidth="1000.0" styleClass="bg" xmlns="http://javafx.com/javafx/24.0.1"
-            xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.a8043.simpleIDE.views.ProjectView" fx:id="pane">
+<AnchorPane fx:id="pane" prefHeight="600.0" prefWidth="1000.0" styleClass="bg" xmlns="http://javafx.com/javafx/24.0.1"
+            xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.a8043.simpleIDE.views.ProjectView">
     <children>
         <TabPane layoutX="11.0" layoutY="10.0" prefHeight="584.0" prefWidth="255.0" side="LEFT" styleClass="island"
                  tabClosingPolicy="UNAVAILABLE" AnchorPane.bottomAnchor="10.0" AnchorPane.leftAnchor="10.0"
@@ -24,10 +24,13 @@
                     AnchorPane.leftAnchor="10.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="10.0">
             <children>
                 <ComboBox fx:id="runnableBox" layoutX="733.0" layoutY="4.0" prefHeight="25.0" prefWidth="211.0"
-                          AnchorPane.bottomAnchor="4.0" AnchorPane.rightAnchor="38.0" AnchorPane.topAnchor="4.0"/>
+                          AnchorPane.bottomAnchor="4.0" AnchorPane.rightAnchor="72.0" AnchorPane.topAnchor="4.0"/>
                 <Button fx:id="runnableRunButton" layoutX="890.0" layoutY="7.0" mnemonicParsing="false"
                         onMouseClicked="#runRunnable" prefHeight="30.0" prefWidth="30.0" AnchorPane.bottomAnchor="4.0"
                         AnchorPane.rightAnchor="4.0" AnchorPane.topAnchor="4.0"/>
+                <Button fx:id="runnableManageButton" layoutX="917.0" layoutY="12.0" mnemonicParsing="false"
+                        onAction="#openRunnableManager" prefHeight="30.0" prefWidth="30.0" AnchorPane.bottomAnchor="4.0"
+                        AnchorPane.rightAnchor="38.0" AnchorPane.topAnchor="4.0"/>
             </children>
         </AnchorPane>
     </children>

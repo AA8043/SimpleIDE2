@@ -338,3 +338,25 @@ completion-description-label {
 .separator {
     -fx-border-color: rgb(63, 94, 125);
 }
+
+/* context menu */
+
+.context-menu {
+    -fx-background-color: rgb(38, 40, 43);
+    -fx-background-radius: 8px;
+    -fx-border-radius: 8px;
+    -fx-padding: 4px 0px;
+}
+
+.menu-item {
+    -fx-padding: 6px 24px 6px 16px;
+    -fx-background-radius: 0px;
+}
+
+.menu-item:hover {
+    -fx-background-color: rgb(57, 59, 64);
+}
+
+.menu-item:focused {
+    -fx-background-color: rgb(46, 67, 110);
+}

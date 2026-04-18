@@ -2,11 +2,12 @@ package org.a8043.simpleIDE.project;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.thread.ThreadUtil;
-import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.a8043.simpleIDE.project.buildTool.BuildTool;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
+import org.a8043.simpleIDE.project.runnables.RunnableType;
 import org.a8043.simpleIDE.util.config.ConfigUtil;
 import org.apache.commons.io.monitor.FileAlterationListener;
 import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
@@ -27,6 +29,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Getter
@@ -42,7 +45,7 @@ public class ProjectEditor implements Closeable {
     private final File modelFile;
     private final BuildTool buildTool;
     private final ProjectConfig config;
-    private final List<RunnableTask> runnableList = new ArrayList<>();
+    private final ObservableList<RunnableTask> runnableList = FXCollections.observableArrayList();
     private final List<FileAlterationListener> fileListenerList = new ArrayList<>();
     private final FileAlterationMonitor fileMonitor;
     private final List<ControllableFile> openedFileList = new ArrayList<>();
@@ -73,19 +76,10 @@ public class ProjectEditor implements Closeable {
             config = ConfigUtil.toObject(new JSONObject(FileUtil.readUtf8String(configFile)), ProjectConfig.class);
         }
 
-        config.getRunnableJsonList().forEach(json -> {
-            try {
-                Class<?> clazz = Class.forName(json.getStr("type"));
-                if (RunnableTask.class.isAssignableFrom(clazz)) {
-                    Object object = ReflectUtil.newInstance(clazz, this, json);
-                    runnableList.add((RunnableTask) object);
-                } else {
-                    throw new Exception("不正确的可运行类型: " + clazz.getName());
-                }
-            } catch (Exception e) {
-                log.error(e.getMessage(), e);
-            }
-        });
+        config.getRunnableJsonList().forEach(json -> runnableList.add(RunnableType.TYPE_LIST.stream()
+            .filter(t -> Objects.equals(t.getName(), json.getStr("type"))).findFirst()
+            .orElseThrow(() -> new RuntimeException("不正确的可运行类型: " + json.getStr("type")))
+            .createTask(this, json)));
 
         jdk = Jdk.getJdk(config.getJdkPath());
         index = new Index(this);
@@ -183,6 +177,8 @@ public class ProjectEditor implements Closeable {
     }
 
     private void saveConfig() {
+        config.getRunnableJsonList().clear();
+        runnableList.forEach(runnable -> config.getRunnableJsonList().add(runnable.getJson()));
         FileUtil.writeUtf8String(new JSONObject(projectModel).toString(), modelFile);
         FileUtil.writeUtf8String(ConfigUtil.toJson(config).toString(), configFile);
     }
