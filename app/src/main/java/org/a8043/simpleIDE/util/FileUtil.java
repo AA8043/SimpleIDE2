@@ -22,12 +22,7 @@ public class FileUtil {
     private static final Map<String, Image> FILE_IMAGE_CACHE = new HashMap<>();
 
     public static String getRelativePath(File base, File full) {
-        String basePath = base.getAbsolutePath();
-        String fullPath = full.getAbsolutePath();
-        if (!fullPath.startsWith(basePath)) {
-            return fullPath;
-        }
-        return fullPath.substring(basePath.length() + 1);
+        return base.toPath().relativize(full.toPath()).toString();
     }
 
     public static File findFileDirInFolders(List<File> srcDirList, String name) {
@@ -73,18 +68,20 @@ public class FileUtil {
 
     public static HBox getDisplayItem(File file) {
         return new HBox(getImageView(file, 16, 16), new Label(file.getName()) {{
-            ObjectProperty<GitUtil.FileStatus> fileStatus = GitUtil.getFileStatus(file);
-            Function<GitUtil.FileStatus, Void> onChange = status -> {
-                setStyle(switch (status) {
-                    case NORMAL -> "";
-                    case ADDED -> "-fx-text-fill: rgb(114, 164, 77);";
-                    case CHANGED -> "-fx-text-fill: rgb(99, 173, 255);";
-                    case UNTRACKED, IGNORED -> "-fx-text-fill: rgb(213, 135, 69);";
-                });
-                return null;
-            };
-            fileStatus.addListener((observable, oldValue, newValue) -> onChange.apply(newValue));
-            onChange.apply(fileStatus.get());
+            if (file.isFile()) {
+                ObjectProperty<GitUtil.FileStatus> fileStatus = GitUtil.getFileStatus(file);
+                Function<GitUtil.FileStatus, Void> onChange = status -> {
+                    setStyle(switch (status) {
+                        case NORMAL -> "";
+                        case ADDED -> "-fx-text-fill: rgb(114, 164, 77);";
+                        case CHANGED -> "-fx-text-fill: rgb(99, 173, 255);";
+                        case UNTRACKED, IGNORED -> "-fx-text-fill: rgb(213, 135, 69);";
+                    });
+                    return null;
+                };
+                fileStatus.addListener((observable, oldValue, newValue) -> onChange.apply(newValue));
+                onChange.apply(fileStatus.get());
+            }
         }});
     }
 

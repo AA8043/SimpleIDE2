@@ -15,5 +15,10 @@
             <AppenderRef ref="logs"/>
             <AppenderRef ref="Console"/>
         </Root>
+
+        <Logger name="org.eclipse.jgit" level="info" additivity="false">
+            <AppenderRef ref="logs"/>
+            <AppenderRef ref="Console"/>
+        </Logger>
     </Loggers>
 </Configuration>

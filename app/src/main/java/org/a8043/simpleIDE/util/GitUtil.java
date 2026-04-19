@@ -1,7 +1,12 @@
 package org.a8043.simpleIDE.util;
 
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.io.LineHandler;
 import cn.hutool.core.io.watch.SimpleWatcher;
 import cn.hutool.core.io.watch.WatchMonitor;
+import cn.hutool.core.util.RuntimeUtil;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import lombok.SneakyThrows;
@@ -12,22 +17,25 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.WatchEvent;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Consumer;
 
 public class GitUtil {
+    private static final List<String> DEFAULT_ARG_LIST = List.of("git",
+        "-c", "credential.helper=", "-c", "core.quotepath=false", "-c", "log.showSignature=false");
     private static final List<Git> GIT_LIST = new ArrayList<>();
-
-    public static Git getGit(File file) {
-        return GIT_LIST.stream().filter(git -> git.getRepository().getWorkTree().equals(file)).findFirst().orElse(null);
-    }
 
     @SneakyThrows
     public static void open(File file) {
         Git git = Git.open(file);
         GIT_LIST.add(git);
+    }
+
+    @SneakyThrows
+    public static void init(File dir) {
+        List<String> argList = new ArrayList<>(DEFAULT_ARG_LIST);
+        argList.add("init");
+        RuntimeUtil.exec(null, dir, argList.toArray(new String[0]));
     }
 
     private static final Map<File, ObjectProperty<FileStatus>> FILE_STATUS_MAP = new HashMap<>();
@@ -37,42 +45,84 @@ public class GitUtil {
         if (FILE_STATUS_MAP.containsKey(file)) {
             return FILE_STATUS_MAP.get(file);
         } else {
-            Git git = findGit(file);
-            if (git == null) {
-                return new SimpleObjectProperty<>(FileStatus.NORMAL);
-            }
             ObjectProperty<FileStatus> statusProperty = new SimpleObjectProperty<>();
             FILE_STATUS_MAP.put(file, statusProperty);
-            Runnable onChange = () -> {
-                String relativePath = FileUtil.getRelativePath(git.getRepository().getWorkTree(), file)
-                    .replace("\\", "/");
-                Status status;
-                try {
-                    status = git.status().addPath(relativePath).call();
-                } catch (GitAPIException e) {
-                    throw new RuntimeException(e);
-                }
-                if (status.getAdded().contains(relativePath)) {
-                    statusProperty.set(FileStatus.ADDED);
-                } else if (status.getChanged().contains(relativePath)) {
-                    statusProperty.set(FileStatus.CHANGED);
-                } else if (status.getUntracked().contains(relativePath)) {
-                    statusProperty.set(FileStatus.UNTRACKED);
-                } else if (status.getIgnoredNotInIndex().contains(relativePath)) {
-                    statusProperty.set(FileStatus.IGNORED);
-                } else {
-                    statusProperty.set(FileStatus.NORMAL);
-                }
-            };
-            FileUtil.watch(file, new SimpleWatcher() {
+            org.a8043.simpleIDE.util.FileUtil.watch(file, new SimpleWatcher() {
                 @Override
                 public void onModify(WatchEvent<?> event, Path currentPath) {
-                    onChange.run();
+                    refreshFileStatus(file);
                 }
             }, WatchMonitor.ENTRY_MODIFY);
-            onChange.run();
+            refreshFileStatus(file);
             return statusProperty;
         }
+    }
+
+    private static void refreshFileStatus(File file) {
+        Git git = findGit(file);
+        if (git == null) {
+            return;
+        }
+        ObjectProperty<FileStatus> statusProperty = FILE_STATUS_MAP.get(file);
+        String relativePath = org.a8043.simpleIDE.util.FileUtil.getRelativePath(
+            git.getRepository().getWorkTree(), file).replace("\\", "/");
+        Status status;
+        try {
+            status = git.status().addPath(relativePath).call();
+        } catch (GitAPIException e) {
+            throw new RuntimeException(e);
+        }
+        if (status.getAdded().contains(relativePath)) {
+            statusProperty.set(FileStatus.ADDED);
+        } else if (status.getChanged().contains(relativePath)) {
+            statusProperty.set(FileStatus.CHANGED);
+        } else if (status.getUntracked().contains(relativePath)) {
+            statusProperty.set(FileStatus.UNTRACKED);
+        } else if (status.getIgnoredNotInIndex().contains(relativePath)) {
+            statusProperty.set(FileStatus.IGNORED);
+        } else {
+            statusProperty.set(FileStatus.NORMAL);
+        }
+    }
+
+    @SneakyThrows
+    public static List<File> getChangedFiles(File dir) {
+        Git git = findGit(dir);
+        if (git == null) {
+            return List.of();
+        }
+        List<String> filePathList = new ArrayList<>();
+        Status status = git.status().call();
+        filePathList.addAll(status.getAdded());
+        filePathList.addAll(status.getChanged());
+        filePathList.addAll(status.getUntracked());
+        filePathList.addAll(status.getRemoved());
+        return filePathList.stream().map(path -> new File(git.getRepository().getWorkTree(), path)).toList();
+    }
+
+    public static void commit(File dir, List<File> fileList, String message, boolean isAmend, Consumer<String> onOutput) {
+        Consumer<List<String>> run = argList -> {
+            onOutput.accept(DateUtil.format(new Date(), "HH:mm:ss") + ": " + argList);
+            IoUtil.readUtf8Lines(RuntimeUtil.exec(null, dir, argList.toArray(new String[0])).getInputStream(),
+                (LineHandler) onOutput::accept);
+        };
+
+        List<String> addArgList = new ArrayList<>(DEFAULT_ARG_LIST);
+        addArgList.addAll(List.of("add", "--ignore-errors", "-A", "-f", "--"));
+        fileList.forEach(file -> addArgList.add(org.a8043.simpleIDE.util.FileUtil.getRelativePath(dir, file)
+            .replace("\\", "/")));
+        run.accept(addArgList);
+
+        List<String> commitArgList = new ArrayList<>(DEFAULT_ARG_LIST);
+        File messageFile = FileUtil.writeUtf8String(message, FileUtil.createTempFile());
+        commitArgList.add("commit");
+        if (isAmend) {
+            commitArgList.add("--amend");
+        }
+        commitArgList.addAll(List.of("-F", messageFile.getAbsolutePath(), "--"));
+        run.accept(commitArgList);
+
+        FILE_STATUS_MAP.keySet().forEach(GitUtil::refreshFileStatus);
     }
 
     private static Git findGit(File file) {

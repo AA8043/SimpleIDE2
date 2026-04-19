@@ -17,10 +17,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
-import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import lombok.AllArgsConstructor;
@@ -40,6 +37,7 @@ import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Handler;
@@ -342,6 +340,26 @@ public class Main extends Application {
         ModalController<VBox> modalController = showModal(box, 400, 300);
         modalController.setOnClose(onClose);
         button.setOnAction(e -> modalController.close());
+    }
+
+    public void showConfirmModal(String text, Runnable onConfirm) {
+        AtomicReference<ModalController<Node>> modal = new AtomicReference<>();
+        modal.set(showModal(new VBox(new Label(text), new Separator(), new HBox(new Button("ok") {{
+            setOnAction(e -> {
+                onConfirm.run();
+                if (modal.get() != null) {
+                    modal.get().close();
+                }
+            });
+        }}, new Button("cancel") {{
+            setOnAction(e -> {
+                if (modal.get() != null) {
+                    modal.get().close();
+                }
+            });
+        }}) {{
+            setAlignment(Pos.CENTER_RIGHT);
+        }}), 400, 300));
     }
 
     @Getter

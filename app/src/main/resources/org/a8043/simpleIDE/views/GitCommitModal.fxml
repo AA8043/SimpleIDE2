@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<VBox xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="org.a8043.simpleIDE.views.GitCommitModal">
+    <children>
+        <SplitPane dividerPositions="0.2584856396866841">
+            <items>
+                <ListView fx:id="changeList" prefHeight="200.0" prefWidth="200.0"/>
+                <VBox prefHeight="200.0" prefWidth="100.0">
+                    <children>
+                        <HBox>
+                            <children>
+                                <Button mnemonicParsing="false" onAction="#selectAll" text="selectAll"/>
+                                <Button fx:id="historyButton" mnemonicParsing="false"/>
+                            </children>
+                        </HBox>
+                        <TextArea fx:id="messageArea" prefHeight="200.0" prefWidth="200.0"/>
+                    </children>
+                </VBox>
+            </items>
+        </SplitPane>
+        <HBox alignment="CENTER_RIGHT">
+            <children>
+                <CheckBox fx:id="amendBox" mnemonicParsing="false" text="git.amend"/>
+                <Button mnemonicParsing="false" onAction="#commit" text="git.commit"/>
+                <Button mnemonicParsing="false" onAction="#commitAndPush" text="git.commitAndPush"/>
+            </children>
+        </HBox>
+    </children>
+</VBox>

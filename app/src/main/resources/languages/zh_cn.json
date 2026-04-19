@@ -16,6 +16,8 @@
         "class": "类",
         "line": "行",
         "ok": "确定",
+        "selectAll": "全选",
+        "cancel": "取消",
         "location": "位置",
         "jdk": "JDK",
         "groupId": "GroupId",
@@ -69,6 +71,10 @@
         "runner.debugger.varModal.title": "变量 {}",
         "runner.debugger.varModal.viewer.string": "字符串查看器",
         "runner.debugger.breakpoint": "断点",
-        "runner.debugger.breakpoint.hitTip": "命中断点: {}"
+        "runner.debugger.breakpoint.hitTip": "命中断点: {}",
+        "git.commit": "提交",
+        "git.commitAndPush": "提交并推送",
+        "git.amend": "修正",
+        "git.noGit": "不是Git仓库, 是否创建?"
     }
 }

@@ -18,6 +18,7 @@ import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.RunnableType;
+import org.a8043.simpleIDE.util.GitUtil;
 import org.a8043.simpleIDE.util.config.ConfigUtil;
 
 import java.io.Closeable;
@@ -85,6 +86,10 @@ public class ProjectEditor implements Closeable {
             projectModel = JSONUtil.toBean(FileUtil.readUtf8String(modelFile), ProjectModel.class);
         } else {
             projectModel = buildTool.sync(this);
+        }
+
+        if (new File(project.getProjectDir(), ".git").exists()) {
+            GitUtil.open(project.getProjectDir());
         }
 
         new Thread(() -> {

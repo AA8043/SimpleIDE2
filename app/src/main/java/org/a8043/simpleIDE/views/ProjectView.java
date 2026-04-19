@@ -10,10 +10,7 @@ import javafx.scene.SnapshotParameters;
 import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.input.MouseEvent;
+import javafx.scene.input.*;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -25,6 +22,7 @@ import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.Runner;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.FileUtil;
+import org.a8043.simpleIDE.util.GitUtil;
 import org.a8043.simpleIDE.util.Util;
 
 import java.io.File;
@@ -61,6 +59,16 @@ public class ProjectView {
     private void initialize() {
         Main.register(new Main.KeyBinding("runnable.run", "run",
             () -> runRunnable(null), new KeyCodeCombination(KeyCode.F5)));
+        Main.register(new Main.KeyBinding("git.commit", "git.commit",
+            () -> {
+                if (new File(editor.getProject().getProjectDir(), ".git").exists()) {
+                    GitCommitModal.show(editor);
+                } else {
+                    Main.instance.showConfirmModal("git.noGit", () ->
+                        GitUtil.init(editor.getProject().getProjectDir()));
+                }
+            }, new KeyCodeCombination(KeyCode.C,
+            KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN, KeyCombination.ALT_DOWN)));
 
         editorTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             tabHistory.remove(newTab);
