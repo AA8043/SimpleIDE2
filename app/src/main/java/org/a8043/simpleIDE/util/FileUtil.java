@@ -94,6 +94,7 @@ public class FileUtil {
         WatchMonitor watchMonitor = WatchUtil.create(file, events);
         WATCH_MONITOR_LIST.add(watchMonitor);
         watchMonitor.setWatcher(watcher);
+        watchMonitor.start();
     }
 
     public static void close() {

@@ -4,6 +4,8 @@ import animatefx.animation.SlideInRight;
 import animatefx.animation.SlideOutRight;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.resource.ResourceUtil;
+import cn.hutool.core.io.watch.SimpleWatcher;
+import cn.hutool.core.io.watch.WatchMonitor;
 import cn.hutool.core.thread.ThreadUtil;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
@@ -29,7 +31,6 @@ import org.a8043.simpleIDE.fileEditor.*;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.Util;
-import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
 import org.markdown4j.Markdown4jProcessor;
@@ -37,6 +38,8 @@ import org.markdown4j.Markdown4jProcessor;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Path;
+import java.nio.file.WatchEvent;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -170,37 +173,35 @@ public class FileTab {
         });
 
         AtomicBoolean isAsking = new AtomicBoolean(false);
-        editor.addFileListener(new FileAlterationListenerAdaptor() {
+        org.a8043.simpleIDE.util.FileUtil.watch(fileEditor.getFile().getFile(), new SimpleWatcher() {
             @Override
-            public void onFileChange(File file) {
-                if (file.equals(fileEditor.getFile().getFile())) {
-                    String newContent = fileEditor.getFile().read();
-                    if (!Objects.equals(newContent, codeArea.getText()) && !isAsking.get()) {
-                        isAsking.set(true);
-                        Platform.runLater(() -> {
-                            Button rereadButton = new Button("fileExternalChange.reread");
-                            Button ignoreButton = new Button("fileExternalChange.ignore");
-                            Main.ModalController<VBox> modal = Main.instance.showModal("fileExternalChange",
-                                new VBox(new Label(ResourceManager.getText("fileExternalChange.description",
-                                    fileEditor.getFile().getFile().getName())),
-                                    new BorderPane(null, null, rereadButton,
-                                        null, ignoreButton)), 400, 200);
-                            modal.setOnClose(() -> isAsking.set(false));
+            public void onModify(WatchEvent<?> event, Path currentPath) {
+                String newContent = fileEditor.getFile().read();
+                if (!Objects.equals(newContent, codeArea.getText()) && !newContent.isEmpty() && !isAsking.get()) {
+                    isAsking.set(true);
+                    Platform.runLater(() -> {
+                        Button rereadButton = new Button("fileExternalChange.reread");
+                        Button ignoreButton = new Button("fileExternalChange.ignore");
+                        Main.ModalController<VBox> modal = Main.instance.showModal("fileExternalChange",
+                            new VBox(new Label(ResourceManager.getText("fileExternalChange.description",
+                                fileEditor.getFile().getFile().getName())),
+                                new BorderPane(null, null, rereadButton,
+                                    null, ignoreButton)), 400, 200);
+                        modal.setOnClose(() -> isAsking.set(false));
 
-                            rereadButton.setOnAction(e -> {
-                                codeArea.replaceText(newContent);
-                                modal.close();
-                            });
-                            ignoreButton.setOnAction(e -> {
-                                fileEditor.getFile().setContent(codeArea.getText());
-                                fileEditor.getFile().write();
-                                modal.close();
-                            });
+                        rereadButton.setOnAction(e -> {
+                            codeArea.replaceText(newContent);
+                            modal.close();
                         });
-                    }
+                        ignoreButton.setOnAction(e -> {
+                            fileEditor.getFile().setContent(codeArea.getText());
+                            fileEditor.getFile().write();
+                            modal.close();
+                        });
+                    });
                 }
             }
-        });
+        }, WatchMonitor.ENTRY_MODIFY);
 
         if (isFailedToOpen) {
             showTip(new Label(ResourceManager.getText("fileTab.failedToOpenFileTip")));

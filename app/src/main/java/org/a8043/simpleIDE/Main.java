@@ -254,8 +254,8 @@ public class Main extends Application {
         org.a8043.simpleIDE.util.FileUtil.close();
 
         log.info("正在保存config...");
-        KEY_BINDING_LIST.forEach(binding -> keyBindingJson.set(binding.getName(),
-            binding.getKeyCombination() != null ? binding.getKeyCombination().getName() : "null"));
+        KEY_BINDING_LIST.forEach(binding -> (keyBindingJson != null ? keyBindingJson : (keyBindingJson = new JSONObject()))
+            .set(binding.getName(), binding.getKeyCombination() != null ? binding.getKeyCombination().getName() : "null"));
         FileUtil.writeUtf8String(keyBindingJson.toString(), new File("./keyBindings.json"));
         FileUtil.writeUtf8String(recordJson.toString(), new File("./record.json"));
         FileUtil.writeUtf8String(ConfigUtil.toJson(settings).toString(), new File("./settings.json"));

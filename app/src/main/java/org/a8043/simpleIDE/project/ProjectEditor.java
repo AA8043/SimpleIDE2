@@ -19,10 +19,6 @@ import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.RunnableType;
 import org.a8043.simpleIDE.util.config.ConfigUtil;
-import org.apache.commons.io.monitor.FileAlterationListener;
-import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
-import org.apache.commons.io.monitor.FileAlterationMonitor;
-import org.apache.commons.io.monitor.FileAlterationObserver;
 
 import java.io.Closeable;
 import java.io.File;
@@ -46,8 +42,6 @@ public class ProjectEditor implements Closeable {
     private final BuildTool buildTool;
     private final ProjectConfig config;
     private final ObservableList<RunnableTask> runnableList = FXCollections.observableArrayList();
-    private final List<FileAlterationListener> fileListenerList = new ArrayList<>();
-    private final FileAlterationMonitor fileMonitor;
     private final List<ControllableFile> openedFileList = new ArrayList<>();
 
     public ProjectEditor(Project project) {
@@ -99,54 +93,10 @@ public class ProjectEditor implements Closeable {
                 saveFiles();
             }
         }).start();
-
-        FileAlterationObserver fileObserver = new FileAlterationObserver(project.getProjectDir());
-        fileObserver.addListener(new FileAlterationListenerAdaptor() {
-            @Override
-            public void onDirectoryCreate(File directory) {
-                fileListenerList.forEach(listener -> listener.onDirectoryCreate(directory));
-            }
-
-            @Override
-            public void onDirectoryChange(File directory) {
-                fileListenerList.forEach(listener -> listener.onDirectoryChange(directory));
-            }
-
-            @Override
-            public void onDirectoryDelete(File directory) {
-                fileListenerList.forEach(listener -> listener.onDirectoryDelete(directory));
-            }
-
-            @Override
-            public void onFileCreate(File file) {
-                fileListenerList.forEach(listener -> listener.onFileCreate(file));
-            }
-
-            @Override
-            public void onFileChange(File file) {
-                fileListenerList.forEach(listener -> listener.onFileChange(file));
-            }
-
-            @Override
-            public void onFileDelete(File file) {
-                fileListenerList.forEach(listener -> listener.onFileDelete(file));
-            }
-        });
-        fileMonitor = new FileAlterationMonitor(1000);
-        fileMonitor.addObserver(fileObserver);
-        try {
-            fileMonitor.start();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     public JavaParser getJavaParser() {
         return javaParserThreadLocal.get();
-    }
-
-    public void addFileListener(FileAlterationListener listener) {
-        fileListenerList.add(listener);
     }
 
     public ControllableFile openFile(File file, String content) {
@@ -165,7 +115,6 @@ public class ProjectEditor implements Closeable {
     @Override
     public void close() {
         index.close();
-        fileMonitor.stop();
         javaParserThreadLocal.remove();
         saveFiles();
         saveConfig();
