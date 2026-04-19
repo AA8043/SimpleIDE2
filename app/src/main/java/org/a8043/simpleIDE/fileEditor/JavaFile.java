@@ -24,10 +24,10 @@ import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.MethodSignature;
 import org.a8043.simpleIDE.resource.ResourceManager;
+import org.a8043.simpleIDE.util.FileUtil;
 import org.a8043.simpleIDE.util.FixedList;
 import org.a8043.simpleIDE.util.JavaUtil;
 import org.a8043.simpleIDE.util.SearchUtil;
-import org.a8043.simpleIDE.util.Util;
 import org.fxmisc.richtext.model.StyleSpans;
 import org.fxmisc.richtext.model.StyleSpansBuilder;
 
@@ -47,7 +47,7 @@ public class JavaFile extends FileEditor {
         super(file, editor);
         // TODO: 模块、test目录
         File file1 = file.getFile();
-        String relativePath = Util.getRelativePath(Util.findFileDirInFolders(editor.getProjectModel().getSrcDirList(),
+        String relativePath = FileUtil.getRelativePath(FileUtil.findFileDirInFolders(editor.getProjectModel().getSrcDirList(),
             file1.getName()), file1);
         String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
         indexPoint = JavaUtil.resolveModuleByPath(getEditor().getIndex(), indexPoint, path)

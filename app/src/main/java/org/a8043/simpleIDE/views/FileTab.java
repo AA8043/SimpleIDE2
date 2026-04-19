@@ -346,10 +346,10 @@ public class FileTab {
         private final String name;
 
         public FileTabTab(File file, Node node, FileTab tab) {
-            super(file.getName(), node);
+            super(null, node);
             this.file = file;
             name = file.getName();
-            setGraphic(Util.getFileImageView(file, 16, 16));
+            setGraphic(org.a8043.simpleIDE.util.FileUtil.getDisplayItem(file));
             setOnClosed(e -> tab.editor.closeFile(tab.fileEditor.getFile()));
         }
     }

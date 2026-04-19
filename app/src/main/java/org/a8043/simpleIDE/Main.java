@@ -15,12 +15,15 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -34,6 +37,8 @@ import org.a8043.simpleIDE.views.WelcomeView;
 
 import java.io.File;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Handler;
@@ -84,12 +89,35 @@ public class Main extends Application {
         });
     }
 
+    private static final List<KeyBinding> KEY_BINDING_LIST = new ArrayList<>();
+
+    public static void register(KeyBinding keyBinding) {
+        if (instance.getKeyBindingJson() != null) {
+            keyBinding.setKeyCombination(KeyCombination.valueOf(
+                instance.getKeyBindingJson().getStr(keyBinding.getName())));
+        }
+        KEY_BINDING_LIST.add(keyBinding);
+    }
+
+    @AllArgsConstructor
+    public static class KeyBinding {
+        @Getter
+        private final String name;
+        @Getter
+        private final String displayName;
+        private final Runnable runnable;
+        @Getter
+        @Setter
+        private KeyCombination keyCombination;
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
 
     private JSONObject recordJson;
     private Settings settings;
+    private JSONObject keyBindingJson;
     private Stage stage;
     private final StackPane pane = new StackPane();
 
@@ -115,7 +143,8 @@ public class Main extends Application {
             stepTipSetter.apply("...");
             Platform.runLater(() -> {
                 setUserAgentStylesheet(ResourceUtil.getResource("styles/Main.css").toString());
-                stage.setScene(new Scene(pane, stage.getWidth(), stage.getHeight()));
+                Scene scene = new Scene(pane, stage.getWidth(), stage.getHeight());
+                stage.setScene(scene);
                 display(WelcomeView.FXML_URL);
                 ResourceManager.setup(pane);
 
@@ -124,6 +153,12 @@ public class Main extends Application {
                 stage.setWidth(1000);
                 stage.setHeight(600);
                 stage.show();
+
+                scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> KEY_BINDING_LIST.forEach(binding -> {
+                    if (binding.getKeyCombination() != null && binding.getKeyCombination().match(event)) {
+                        binding.runnable.run();
+                    }
+                }));
 
                 Platform.runLater(loadView::close);
             });
@@ -143,6 +178,12 @@ public class Main extends Application {
             JSONObject json = (JSONObject) v;
             Jdk.JDK_LIST.add(new Jdk(new File(json.getStr("path")), json.getStr("version")));
         });
+
+        stepTipSetter.apply("正在读取键位绑定...");
+        File keyBindingsFile = new File("./keyBindings.json");
+        if (keyBindingsFile.exists()) {
+            keyBindingJson = new JSONObject(FileUtil.readUtf8String(keyBindingsFile));
+        }
 
         stepTipSetter.apply("正在读取settings...");
         File settingsJsonFile = new File("./settings.json");
@@ -205,7 +246,14 @@ public class Main extends Application {
             log.error(e.getMessage(), e);
         }
 
-        log.info("正在保存record和settings...");
+        log.info("正在关闭文件...");
+        org.a8043.simpleIDE.util.FileUtil.close();
+
+        log.info("正在保存config...");
+        JSONObject keyBindingJson = new JSONObject();
+        KEY_BINDING_LIST.forEach(binding -> keyBindingJson.set(binding.getName(),
+            binding.getKeyCombination() != null ? binding.getKeyCombination().getName() : "null"));
+        FileUtil.writeUtf8String(keyBindingJson.toString(), new File("./keyBindings.json"));
         FileUtil.writeUtf8String(recordJson.toString(), new File("./record.json"));
         FileUtil.writeUtf8String(ConfigUtil.toJson(settings).toString(), new File("./settings.json"));
     }

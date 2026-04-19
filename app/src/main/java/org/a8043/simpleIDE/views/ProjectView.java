@@ -5,14 +5,18 @@ import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.control.*;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.util.Callback;
 import lombok.SneakyThrows;
 import org.a8043.simpleIDE.Main;
@@ -20,6 +24,7 @@ import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.Runner;
 import org.a8043.simpleIDE.resource.ResourceManager;
+import org.a8043.simpleIDE.util.FileUtil;
 import org.a8043.simpleIDE.util.Util;
 
 import java.io.File;
@@ -54,6 +59,9 @@ public class ProjectView {
 
     @FXML
     private void initialize() {
+        Main.register(new Main.KeyBinding("runnable.run", "run",
+            () -> runRunnable(null), new KeyCodeCombination(KeyCode.F5)));
+
         editorTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             if (newTab instanceof FileTab.FileTabTab fileTab) {
                 tabHistory.remove(fileTab);
@@ -98,14 +106,7 @@ public class ProjectView {
             }
         });
 
-        fileTreeView.setCellFactory(Util.createTreeCell(file -> {
-            Label label = new Label(file.getName());
-            ImageView imageView = new ImageView(Util.getFileImage(file));
-            imageView.setFitWidth(16);
-            imageView.setFitHeight(16);
-            label.setGraphic(imageView);
-            return label;
-        }));
+        fileTreeView.setCellFactory(Util.createTreeCell(FileUtil::getDisplayItem));
         File projectDir = editor.getProject().getProjectDir();
         TreeItem<File> root = new TreeItem<>(projectDir);
         addFileToTreeItem(projectDir, root);
@@ -172,7 +173,7 @@ public class ProjectView {
             editorTabPane.getTabs().add(tab);
             new Thread(runner::run).start();
         };
-        if (event.isShiftDown()) {
+        if (event != null && event.isShiftDown()) {
             Main.ModalController<VBox> modal = Main.instance.showModal(new VBox() {{
                 runner.getOptionMap().forEach((k, v) -> getChildren().add(new CheckBox("runnable." + k) {{
                     setSelected(v);
