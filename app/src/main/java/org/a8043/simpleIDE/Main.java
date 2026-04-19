@@ -31,6 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
+import org.a8043.simpleIDE.util.GitUtil;
 import org.a8043.simpleIDE.util.config.ConfigUtil;
 import org.a8043.simpleIDE.views.LoadView;
 import org.a8043.simpleIDE.views.WelcomeView;
@@ -245,6 +246,9 @@ public class Main extends Application {
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
+
+        log.info("正在关闭Git...");
+        GitUtil.close();
 
         log.info("正在关闭文件...");
         org.a8043.simpleIDE.util.FileUtil.close();

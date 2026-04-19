@@ -61,12 +61,12 @@ repositories {
 }
 
 dependencies {
-
-implementation("com.github.javaparser:javaparser-core:3.27.1")
+    implementation("com.github.javaparser:javaparser-core:3.27.1")
     implementation("org.benf:cfr:0.152")
     implementation("org.apache.maven.shared:maven-invoker:3.3.0")
     implementation("org.apache.maven:maven-model:3.9.11")
     implementation("org.gradle:gradle-tooling-api:9.0.0")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.6.0.202603022253-r")
 
     implementation("org.openjfx:javafx-controls:$javafxVersion:$javafxPlatform")
     implementation("org.openjfx:javafx-base:$javafxVersion:$javafxPlatform")

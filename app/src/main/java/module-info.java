@@ -14,6 +14,7 @@ module SimpleIDE.main {
     requires maven.model;
     requires maven.invoker;
     requires plexus.utils;
+    requires org.eclipse.jgit;
 
     requires javafx.base;
     requires javafx.controls;
