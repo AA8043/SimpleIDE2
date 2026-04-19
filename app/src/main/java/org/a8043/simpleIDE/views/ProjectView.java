@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ProjectView {
     public static final URL FXML_URL = ResourceUtil.getResource("ProjectView.fxml", ProjectView.class);
     private final ProjectEditor editor;
-    private final List<FileTab.FileTabTab> tabHistory = new ArrayList<>();
+    private final List<Tab> tabHistory = new ArrayList<>();
     @FXML
     private AnchorPane pane;
     @FXML
@@ -63,10 +63,8 @@ public class ProjectView {
             () -> runRunnable(null), new KeyCodeCombination(KeyCode.F5)));
 
         editorTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
-            if (newTab instanceof FileTab.FileTabTab fileTab) {
-                tabHistory.remove(fileTab);
-                tabHistory.add(fileTab);
-            }
+            tabHistory.remove(newTab);
+            tabHistory.add(newTab);
         });
 
         fileManagerTab.setGraphic(ResourceManager.createImageView("file", 16, 16));
@@ -165,7 +163,8 @@ public class ProjectView {
 
         editor.saveFiles();
 
-        Tab tab = new Tab("运行: " + runnable.getName());
+        Tab tab = new Tab();
+        tab.setGraphic(new Label("运行: " + runnable.getName()));
         Runner runner = runnable.createRunner();
         tab.setContent(runner.createContent());
 
@@ -191,29 +190,46 @@ public class ProjectView {
 
     private class Switcher extends VBox {
         private final Label pathLabel = new Label();
-        private final ListView<FileTab.FileTabTab> listView = new ListView<>(FXCollections.observableList(tabHistory));
+        private final ListView<Tab> listView = new ListView<>(FXCollections.observableList(tabHistory));
 
         public Switcher() {
-            listView.setCellFactory(Util.createListCell(fileTab ->
-                new HBox(Util.getFileImageView(fileTab.getFile(), 16, 16),
-                    new Label(fileTab.getFile().getName()))));
-            listView.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) ->
-                pathLabel.setText(newTab.getFile().getAbsolutePath()));
+            listView.setCellFactory(Util.createListCell(tab -> {
+                Node node = tab.getGraphic();
+                SnapshotParameters params = new SnapshotParameters();
+                params.setFill(Color.TRANSPARENT);
+                WritableImage snapshot = node.snapshot(params, null);
+                ImageView imageView = new ImageView(snapshot);
+                imageView.setFitWidth(node.getBoundsInLocal().getWidth());
+                imageView.setFitHeight(node.getBoundsInLocal().getHeight());
+                return imageView;
+            }));
+            listView.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+                if (newTab instanceof FileTab.FileTabTab fileTab) {
+                    pathLabel.setText(fileTab.getFile().getAbsolutePath());
+                } else {
+                    pathLabel.setText("");
+                }
+            });
+
             listView.getSelectionModel().select(1);
+            if (listView.getSelectionModel().getSelectedItem().equals(editorTabPane.getSelectionModel().getSelectedItem())) {
+                listView.getSelectionModel().select(0);
+            }
 
             getChildren().addAll(listView, pathLabel);
         }
 
         public void next() {
-            MultipleSelectionModel<FileTab.FileTabTab> selectionModel = listView.getSelectionModel();
-            selectionModel.selectNext();
-            if (selectionModel.getSelectedIndex() >= listView.getItems().size()) {
+            MultipleSelectionModel<Tab> selectionModel = listView.getSelectionModel();
+            if (selectionModel.getSelectedIndex() == listView.getItems().size() - 1) {
                 selectionModel.selectFirst();
+            } else {
+                selectionModel.selectNext();
             }
         }
 
         public void switchTab() {
-            FileTab.FileTabTab selected = listView.getSelectionModel().getSelectedItem();
+            Tab selected = listView.getSelectionModel().getSelectedItem();
             if (selected != null) {
                 editorTabPane.getSelectionModel().select(selected);
             }
