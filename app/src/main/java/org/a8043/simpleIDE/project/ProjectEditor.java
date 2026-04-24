@@ -7,7 +7,9 @@ import cn.hutool.json.JSONUtil;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.*;
 
 @Slf4j
 @Getter
@@ -46,6 +49,10 @@ public class ProjectEditor implements Closeable {
     private final JSONObject record;
     private final ObservableList<RunnableTask> runnableList = FXCollections.observableArrayList();
     private final List<ControllableFile> openedFileList = new ArrayList<>();
+    private final ObservableList<Task<?>> taskList = FXCollections.observableArrayList();
+    private final ExecutorService taskThreadPool = new ThreadPoolExecutor(5, 5,
+        60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(10), Executors.defaultThreadFactory(),
+        new ThreadPoolExecutor.AbortPolicy());
 
     public ProjectEditor(Project project) {
         this.project = project;
@@ -100,6 +107,14 @@ public class ProjectEditor implements Closeable {
             GitUtil.open(project.getProjectDir());
         }
 
+        taskList.addListener((ListChangeListener<Task<?>>) c -> {
+            while (c.next()) {
+                if (c.wasAdded()) {
+                    c.getAddedSubList().forEach(taskThreadPool::submit);
+                }
+            }
+        });
+
         new Thread(() -> {
             while (true) {
                 ThreadUtil.sleep(Main.instance.getSettings().getAutoSaveInterval());
@@ -124,11 +139,21 @@ public class ProjectEditor implements Closeable {
         openedFileList.remove(controllableFile);
     }
 
+    public void runTask(Task<?> task) {
+        taskList.add(task);
+        task.runningProperty().addListener((obs, oldRunning, newRunning) -> {
+            if (!newRunning) {
+                taskList.remove(task);
+            }
+        });
+    }
+
     @SneakyThrows
     @Override
     public void close() {
         index.close();
         javaParserThreadLocal.remove();
+        taskThreadPool.shutdownNow();
         saveFiles();
         saveConfig();
         OPENED_LIST.remove(this);

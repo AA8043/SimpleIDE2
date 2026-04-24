@@ -20,18 +20,27 @@
         <TabPane fx:id="editorTabPane" layoutX="271.2" layoutY="47.2" prefHeight="543.0" prefWidth="718.0"
                  styleClass="island" tabClosingPolicy="UNAVAILABLE" AnchorPane.bottomAnchor="10.0"
                  AnchorPane.leftAnchor="270.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="60.0"/>
-        <AnchorPane layoutX="11.2" layoutY="26.0" prefHeight="37.0" prefWidth="978.0" styleClass="island"
+        <BorderPane layoutX="10.399999618530273" layoutY="10.399999618530273" styleClass="island"
                     AnchorPane.leftAnchor="10.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="10.0">
-            <children>
-                <ComboBox fx:id="runnableBox" layoutX="733.0" layoutY="4.0" prefHeight="25.0" prefWidth="211.0"
-                          AnchorPane.bottomAnchor="4.0" AnchorPane.rightAnchor="72.0" AnchorPane.topAnchor="4.0"/>
-                <Button fx:id="runnableRunButton" layoutX="890.0" layoutY="7.0" mnemonicParsing="false"
-                        onMouseClicked="#runRunnable" prefHeight="30.0" prefWidth="30.0" AnchorPane.bottomAnchor="4.0"
-                        AnchorPane.rightAnchor="4.0" AnchorPane.topAnchor="4.0"/>
-                <Button fx:id="runnableManageButton" layoutX="917.0" layoutY="12.0" mnemonicParsing="false"
-                        onAction="#openRunnableManager" prefHeight="30.0" prefWidth="30.0" AnchorPane.bottomAnchor="4.0"
-                        AnchorPane.rightAnchor="38.0" AnchorPane.topAnchor="4.0"/>
-            </children>
-        </AnchorPane>
+            <right>
+                <HBox alignment="CENTER" spacing="4.0" BorderPane.alignment="CENTER">
+                    <children>
+                        <ComboBox fx:id="runnableBox" prefHeight="25.0" prefWidth="211.0"/>
+                        <Button fx:id="runnableRunButton" mnemonicParsing="false" onMouseClicked="#runRunnable"
+                                prefHeight="30.0" prefWidth="30.0"/>
+                        <Button fx:id="runnableManageButton" mnemonicParsing="false" onAction="#openRunnableManager"
+                                prefHeight="30.0" prefWidth="30.0"/>
+                    </children>
+                </HBox>
+            </right>
+            <left>
+                <HBox alignment="CENTER" BorderPane.alignment="CENTER">
+                    <children>
+                        <ComboBox fx:id="gitBranchBox" prefWidth="150.0"/>
+                        <ListView fx:id="taskList" prefHeight="20.0" prefWidth="250.0"/>
+                    </children>
+                </HBox>
+            </left>
+        </BorderPane>
     </children>
 </AnchorPane>

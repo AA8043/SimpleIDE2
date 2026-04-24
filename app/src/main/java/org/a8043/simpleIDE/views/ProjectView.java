@@ -3,6 +3,7 @@ package org.a8043.simpleIDE.views;
 import cn.hutool.core.io.resource.ResourceUtil;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -12,6 +13,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.*;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.util.Callback;
@@ -39,6 +41,8 @@ public class ProjectView {
     @FXML
     private AnchorPane pane;
     @FXML
+    private ListView<Task<?>> taskList;
+    @FXML
     private TabPane editorTabPane;
     @FXML
     private TreeView<File> fileTreeView;
@@ -57,15 +61,17 @@ public class ProjectView {
 
     @FXML
     private void initialize() {
+        File projectDir = editor.getProject().getProjectDir();
+
         Main.register(new Main.KeyBinding("runnable.run", "run",
             () -> runRunnable(null), new KeyCodeCombination(KeyCode.F5)));
         Main.register(new Main.KeyBinding("git.commit", "git.commit",
             () -> {
-                if (new File(editor.getProject().getProjectDir(), ".git").exists()) {
+                if (new File(projectDir, ".git").exists()) {
                     GitCommitModal.show(editor);
                 } else {
                     Main.instance.showConfirmModal("git.noGit", () ->
-                        GitUtil.init(editor.getProject().getProjectDir()));
+                        GitUtil.init(projectDir));
                 }
             }, new KeyCodeCombination(KeyCode.C,
             KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN, KeyCombination.ALT_DOWN)));
@@ -113,16 +119,26 @@ public class ProjectView {
         });
 
         fileTreeView.setCellFactory(Util.createTreeCell(FileUtil::getDisplayItem));
-        File projectDir = editor.getProject().getProjectDir();
-        TreeItem<File> root = new TreeItem<>(projectDir);
-        addFileToTreeItem(projectDir, root);
-        fileTreeView.setRoot(root);
+        refreshFileTree();
 
         Callback<ListView<RunnableTask>, ListCell<RunnableTask>> runnableBoxCellFactory =
             Util.createListCell(RunnableTask::createListItem);
         runnableBox.setCellFactory(runnableBoxCellFactory);
         runnableBox.setButtonCell(runnableBoxCellFactory.call(null));
         runnableBox.setItems(editor.getRunnableList());
+        taskList.setCellFactory(Util.createListCell(task -> new HBox(new Label() {{
+            textProperty().bind(task.titleProperty());
+        }}, new ProgressBar() {{
+            progressProperty().bind(task.progressProperty());
+        }})));
+        taskList.setItems(editor.getTaskList());
+    }
+
+    private void refreshFileTree() {
+        File projectDir = editor.getProject().getProjectDir();
+        TreeItem<File> root = new TreeItem<>(projectDir);
+        addFileToTreeItem(projectDir, root);
+        fileTreeView.setRoot(root);
     }
 
     private static void addFileToTreeItem(File lastFile, TreeItem<File> treeItem) {
