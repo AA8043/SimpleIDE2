@@ -39,9 +39,11 @@ public class ProjectEditor implements Closeable {
     private final ThreadLocal<JavaParser> javaParserThreadLocal;
     private final File configDir;
     private final File configFile;
+    private final File recordFile;
     private final File modelFile;
     private final BuildTool buildTool;
     private final ProjectConfig config;
+    private final JSONObject record;
     private final ObservableList<RunnableTask> runnableList = FXCollections.observableArrayList();
     private final List<ControllableFile> openedFileList = new ArrayList<>();
 
@@ -66,9 +68,15 @@ public class ProjectEditor implements Closeable {
             } else {
                 config = ProjectConfig.fromDefault(this);
             }
-            saveConfig();
         } else {
             config = ConfigUtil.toObject(new JSONObject(FileUtil.readUtf8String(configFile)), ProjectConfig.class);
+        }
+
+        recordFile = new File(configDir, "record.json");
+        if (recordFile.exists()) {
+            record = new JSONObject(FileUtil.readUtf8String(recordFile));
+        } else {
+            record = new JSONObject();
         }
 
         config.getRunnableJsonList().forEach(json -> runnableList.add(RunnableType.TYPE_LIST.stream()
@@ -135,5 +143,6 @@ public class ProjectEditor implements Closeable {
         runnableList.forEach(runnable -> config.getRunnableJsonList().add(runnable.getJson()));
         FileUtil.writeUtf8String(new JSONObject(projectModel).toString(), modelFile);
         FileUtil.writeUtf8String(ConfigUtil.toJson(config).toString(), configFile);
+        FileUtil.writeUtf8String(record.toString(), recordFile);
     }
 }

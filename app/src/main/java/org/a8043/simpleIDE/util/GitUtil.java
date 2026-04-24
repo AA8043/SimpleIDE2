@@ -9,10 +9,11 @@ import cn.hutool.core.io.watch.WatchMonitor;
 import cn.hutool.core.util.RuntimeUtil;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
-import lombok.SneakyThrows;
+import lombok.*;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.Status;
-import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.transport.URIish;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -58,6 +59,7 @@ public class GitUtil {
         }
     }
 
+    @SneakyThrows
     private static void refreshFileStatus(File file) {
         Git git = findGit(file);
         if (git == null) {
@@ -66,15 +68,12 @@ public class GitUtil {
         ObjectProperty<FileStatus> statusProperty = FILE_STATUS_MAP.get(file);
         String relativePath = org.a8043.simpleIDE.util.FileUtil.getRelativePath(
             git.getRepository().getWorkTree(), file).replace("\\", "/");
-        Status status;
-        try {
-            status = git.status().addPath(relativePath).call();
-        } catch (GitAPIException e) {
-            throw new RuntimeException(e);
-        }
+        Status status = git.status().addPath(relativePath).call();
         if (status.getAdded().contains(relativePath)) {
             statusProperty.set(FileStatus.ADDED);
-        } else if (status.getChanged().contains(relativePath)) {
+        } else if (status.getRemoved().contains(relativePath) || status.getMissing().contains(relativePath)) {
+            statusProperty.set(FileStatus.REMOVED);
+        } else if (status.getChanged().contains(relativePath) || status.getModified().contains(relativePath)) {
             statusProperty.set(FileStatus.CHANGED);
         } else if (status.getUntracked().contains(relativePath)) {
             statusProperty.set(FileStatus.UNTRACKED);
@@ -95,16 +94,18 @@ public class GitUtil {
         Status status = git.status().call();
         filePathList.addAll(status.getAdded());
         filePathList.addAll(status.getChanged());
+        filePathList.addAll(status.getModified());
         filePathList.addAll(status.getUntracked());
         filePathList.addAll(status.getRemoved());
+        filePathList.addAll(status.getMissing());
         return filePathList.stream().map(path -> new File(git.getRepository().getWorkTree(), path)).toList();
     }
 
     public static void commit(File dir, List<File> fileList, String message, boolean isAmend, Consumer<String> onOutput) {
         Consumer<List<String>> run = argList -> {
             onOutput.accept(DateUtil.format(new Date(), "HH:mm:ss") + ": " + argList);
-            IoUtil.readUtf8Lines(RuntimeUtil.exec(null, dir, argList.toArray(new String[0])).getInputStream(),
-                (LineHandler) onOutput::accept);
+            IoUtil.readUtf8Lines(RuntimeUtil.exec(null, dir,
+                argList.toArray(new String[0])).getInputStream(), (LineHandler) onOutput::accept);
         };
 
         List<String> addArgList = new ArrayList<>(DEFAULT_ARG_LIST);
@@ -125,6 +126,38 @@ public class GitUtil {
         FILE_STATUS_MAP.keySet().forEach(GitUtil::refreshFileStatus);
     }
 
+    @SneakyThrows
+    public static List<String> getBranchList(File dir) {
+        Git git = findGit(dir);
+        if (git == null) {
+            return List.of();
+        }
+        return git.branchList().call().stream().map(ref -> Repository.shortenRefName(ref.getName())).toList();
+    }
+
+    @SneakyThrows
+    public static List<Remote> getRemoteList(File dir) {
+        Git git = findGit(dir);
+        if (git == null) {
+            return List.of();
+        }
+        return git.remoteList().call().stream().map(remote -> new Remote(remote.getName(),
+            remote.getURIs().stream().map(URIish::toString).findFirst().orElse(null), git)).toList();
+    }
+
+    public static void push(File dir, String remote, String remoteBranch,
+                            String branch, boolean isForce, Consumer<String> onOutput) {
+        List<String> argList = new ArrayList<>(DEFAULT_ARG_LIST);
+        argList.addAll(List.of("push", "--progress", "--porcelain"));
+        if (isForce) {
+            argList.add("--force");
+        }
+        argList.addAll(List.of(remote, "refs/heads/" + branch + ":" + remoteBranch));
+        onOutput.accept(DateUtil.format(new Date(), "HH:mm:ss") + ": " + argList);
+        IoUtil.readUtf8Lines(RuntimeUtil.exec(null, dir,
+            argList.toArray(new String[0])).getInputStream(), (LineHandler) onOutput::accept);
+    }
+
     private static Git findGit(File file) {
         return GIT_LIST.stream().filter(git -> file.getAbsolutePath().startsWith(
             git.getRepository().getWorkTree().getAbsolutePath())).findFirst().orElse(null);
@@ -134,7 +167,23 @@ public class GitUtil {
         GIT_LIST.forEach(Git::close);
     }
 
+    @Setter
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    public static class Remote {
+        @Getter
+        private String name;
+        @Getter
+        private String url;
+        private final Git git;
+
+        @SneakyThrows
+        public void save() {
+            git.remoteRemove().setRemoteName(name).call();
+            git.remoteAdd().setName(name).setUri(new URIish(url)).call();
+        }
+    }
+
     public enum FileStatus {
-        NORMAL, CHANGED, ADDED, UNTRACKED, IGNORED
+        NORMAL, CHANGED, ADDED, REMOVED, UNTRACKED, IGNORED
     }
 }

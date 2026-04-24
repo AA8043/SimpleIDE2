@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.views;
 
 import cn.hutool.core.io.resource.ResourceUtil;
+import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.fxml.FXML;
@@ -22,6 +23,7 @@ import org.a8043.simpleIDE.util.Util;
 
 import java.io.File;
 import java.net.URL;
+import java.util.concurrent.CountDownLatch;
 
 public class GitCommitModal {
     public static final URL FXML_URL = ResourceUtil.getResource("GitCommitModal.fxml", GitCommitModal.class);
@@ -71,15 +73,32 @@ public class GitCommitModal {
     @FXML
     private void commit() {
         showGitOutput();
-        GitUtil.commit(editor.getProject().getProjectDir(), changeList.getItems().stream()
-                .filter(change -> change.staged.get()).map(change -> change.file).toList(),
-            messageArea.getText(), amendBox.isSelected(), str -> outputArea.appendText(str + "\n"));
+        doCommit();
     }
 
     @FXML
     private void commitAndPush() {
         showGitOutput();
-        // TODO: push
+        new Thread(() -> {
+            try {
+                doCommit().await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            Platform.runLater(() -> GitPushModal.show(editor, str -> outputArea.appendText(str + "\n")));
+        }).start();
+    }
+
+    @FXML
+    private CountDownLatch doCommit() {
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        new Thread(() -> {
+            GitUtil.commit(editor.getProject().getProjectDir(), changeList.getItems().stream()
+                    .filter(change -> change.staged.get()).map(change -> change.file).toList(),
+                messageArea.getText(), amendBox.isSelected(), str -> outputArea.appendText(str + "\n"));
+            countDownLatch.countDown();
+        }).start();
+        return countDownLatch;
     }
 
     @FXML

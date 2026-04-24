@@ -75,6 +75,7 @@ public class FileUtil {
                         case NORMAL -> "";
                         case ADDED -> "-fx-text-fill: rgb(114, 164, 77);";
                         case CHANGED -> "-fx-text-fill: rgb(99, 173, 255);";
+                        case REMOVED -> "-fx-text-fill: rgb(255, 99, 99);";
                         case UNTRACKED, IGNORED -> "-fx-text-fill: rgb(213, 135, 69);";
                     });
                     return null;
