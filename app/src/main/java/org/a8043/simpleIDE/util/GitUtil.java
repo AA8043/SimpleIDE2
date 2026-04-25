@@ -167,6 +167,36 @@ public class GitUtil {
         GIT_LIST.forEach(Git::close);
     }
 
+    @SneakyThrows
+    public static int createBranch(File projectDir, String branch) {
+        List<String> argList = new ArrayList<>(DEFAULT_ARG_LIST);
+        argList.addAll(List.of("switch", "-c", branch));
+        return RuntimeUtil.exec(null, projectDir, argList.toArray(new String[0])).waitFor();
+    }
+
+    @SneakyThrows
+    public static int switchBranch(File projectDir, String branch) {
+        List<String> argList = new ArrayList<>(DEFAULT_ARG_LIST);
+        argList.addAll(List.of("switch", branch));
+        return RuntimeUtil.exec(null, projectDir, argList.toArray(new String[0])).waitFor();
+    }
+
+    @SneakyThrows
+    public static int deleteBranch(File dir, String branch) {
+        List<String> argList = new ArrayList<>(DEFAULT_ARG_LIST);
+        argList.addAll(List.of("branch", "-D", branch));
+        return RuntimeUtil.exec(null, dir, argList.toArray(new String[0])).waitFor();
+    }
+
+    @SneakyThrows
+    public static String getCurrentBranch(File dir) {
+        Git git = findGit(dir);
+        if (git == null) {
+            return null;
+        }
+        return git.getRepository().getBranch();
+    }
+
     @Setter
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class Remote {

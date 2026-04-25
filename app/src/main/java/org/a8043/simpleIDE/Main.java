@@ -342,24 +342,39 @@ public class Main extends Application {
         button.setOnAction(e -> modalController.close());
     }
 
-    public void showConfirmModal(String text, Runnable onConfirm) {
+    public void showAskModal(String text, Node other, Runnable onConfirm) {
         AtomicReference<ModalController<Node>> modal = new AtomicReference<>();
-        modal.set(showModal(new VBox(new Label(text), new Separator(), new HBox(new Button("ok") {{
-            setOnAction(e -> {
-                onConfirm.run();
-                if (modal.get() != null) {
-                    modal.get().close();
-                }
-            });
-        }}, new Button("cancel") {{
-            setOnAction(e -> {
-                if (modal.get() != null) {
-                    modal.get().close();
-                }
-            });
-        }}) {{
-            setAlignment(Pos.CENTER_RIGHT);
-        }}), 400, 300));
+        modal.set(showModal(new VBox() {{
+            getChildren().add(new Label(text));
+            if (other != null) {
+                getChildren().add(other);
+            }
+            getChildren().addAll(new Separator(), new HBox(new Button("ok") {{
+                setOnAction(e -> {
+                    onConfirm.run();
+                    if (modal.get() != null) {
+                        modal.get().close();
+                    }
+                });
+            }}, new Button("cancel") {{
+                setOnAction(e -> {
+                    if (modal.get() != null) {
+                        modal.get().close();
+                    }
+                });
+            }}) {{
+                setAlignment(Pos.CENTER_RIGHT);
+            }});
+        }}, 400, 300));
+    }
+
+    public void showConfirmModal(String text, Runnable onConfirm) {
+        showAskModal(text, null, onConfirm);
+    }
+
+    public void showInputModal(String text, Consumer<String> onConfirm) {
+        TextField textField = new TextField();
+        showAskModal(text, textField, () -> onConfirm.accept(textField.getText()));
     }
 
     @Getter

@@ -22,6 +22,7 @@
         "jdk": "JDK",
         "groupId": "GroupId",
         "artifactId": "ArtifactId",
+        "task.failed": "任务失败",
         "access": "访问权限",
         "access.public": "公开",
         "access.private": "私有",
@@ -74,7 +75,12 @@
         "runner.debugger.breakpoint.hitTip": "命中断点: {}",
         "git.commit": "提交",
         "git.commitAndPush": "提交并推送",
+        "git.push": "推送",
         "git.amend": "修正",
-        "git.noGit": "不是Git仓库, 是否创建?"
+        "git.force": "强制",
+        "git.noGit": "不是Git仓库, 是否创建?",
+        "git.createBranch": "创建分支",
+        "git.switchBranch": "切换分支",
+        "git.deleteBranch": "删除分支"
     }
 }

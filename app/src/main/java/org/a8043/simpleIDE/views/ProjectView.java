@@ -9,6 +9,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.control.*;
+import javafx.scene.control.skin.ComboBoxListViewSkin;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.*;
@@ -54,6 +55,8 @@ public class ProjectView {
     private Button runnableManageButton;
     @FXML
     private Button runnableRunButton;
+    @FXML
+    public ComboBox<String> gitBranchBox;
 
     public ProjectView(ProjectEditor editor) {
         this.editor = editor;
@@ -126,12 +129,99 @@ public class ProjectView {
         runnableBox.setCellFactory(runnableBoxCellFactory);
         runnableBox.setButtonCell(runnableBoxCellFactory.call(null));
         runnableBox.setItems(editor.getRunnableList());
+
+        Runnable refreshBranchBox = () -> {
+            gitBranchBox.getItems().setAll(GitUtil.getBranchList(projectDir));
+            gitBranchBox.getSelectionModel().select(GitUtil.getCurrentBranch(projectDir));
+        };
+        gitBranchBox.setSkin(new ComboBoxListViewSkin<>(gitBranchBox) {
+            @Override
+            public Node getPopupContent() {
+                refreshBranchBox.run();
+                return new VBox(new HBox(new Button(ResourceManager.getText("git.createBranch")) {{
+                    setOnAction(e -> Main.instance.showInputModal("git.createBranch",
+                        name -> editor.runTask(new Task<Void>() {
+                            @Override
+                            protected Void call() throws Exception {
+                                updateTitle(ResourceManager.getText("git.createBranch"));
+                                if (GitUtil.createBranch(projectDir, name) != 0) {
+                                    throw new Exception();
+                                }
+                                return null;
+                            }
+
+                            @Override
+                            protected void succeeded() {
+                                hide();
+                                refreshBranchBox.run();
+                                refreshFileTree();
+                            }
+                        })));
+                }}), new Separator(), new ListView<>(gitBranchBox.getItems()) {{
+                    setOnMouseClicked(event -> {
+                        String branch = getSelectionModel().getSelectedItem();
+                        if (branch != null) {
+                            if (event.getButton() == MouseButton.PRIMARY) {
+                                hide();
+                                editor.runTask(new Task<Void>() {
+                                    @Override
+                                    protected Void call() throws Exception {
+                                        updateTitle(ResourceManager.getText("git.switchBranch"));
+                                        if (GitUtil.switchBranch(projectDir, branch) != 0) {
+                                            throw new Exception();
+                                        }
+                                        return null;
+                                    }
+
+                                    @Override
+                                    protected void succeeded() {
+                                        refreshBranchBox.run();
+                                        refreshFileTree();
+                                    }
+                                });
+                            } else if (event.getButton() == MouseButton.SECONDARY) {
+                                Main.instance.showConfirmModal("git.deleteBranch",
+                                    () -> editor.runTask(new Task<Void>() {
+                                        @Override
+                                        protected Void call() throws Exception {
+                                            updateTitle(ResourceManager.getText("git.deleteBranch"));
+                                            if (GitUtil.deleteBranch(projectDir, branch) != 0) {
+                                                throw new Exception();
+                                            }
+                                            return null;
+                                        }
+
+                                        @Override
+                                        protected void succeeded() {
+                                            refreshBranchBox.run();
+                                            refreshFileTree();
+                                        }
+                                    }));
+                            }
+                        }
+                    });
+                }}) {{
+                    getStyleClass().add("combo-box-popup");
+                }};
+            }
+        });
+        refreshBranchBox.run();
+
         taskList.setCellFactory(Util.createListCell(task -> new HBox(new Label() {{
             textProperty().bind(task.titleProperty());
         }}, new ProgressBar() {{
             progressProperty().bind(task.progressProperty());
         }})));
         taskList.setItems(editor.getTaskList());
+        editor.getTaskList().addListener((ListChangeListener<Task<?>>) c -> {
+            while (c.next()) {
+                if (c.wasAdded()) {
+                    c.getAddedSubList().forEach(task -> task.setOnFailed(e -> Main.instance.showTipModal(
+                        ResourceManager.getText("task.failed") + ": " +
+                        task.getTitle() + "\n" + task.getException().getMessage())));
+                }
+            }
+        });
     }
 
     private void refreshFileTree() {
