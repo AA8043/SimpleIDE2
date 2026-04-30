@@ -11,7 +11,8 @@
             <tabs>
                 <Tab fx:id="fileManagerTab" closable="false">
                     <content>
-                        <TreeView fx:id="fileTreeView" onMouseClicked="#onFileClicked" prefHeight="200.0"
+                        <TreeView fx:id="fileTreeView" onContextMenuRequested="#openFileContextMenu"
+                                  onKeyPressed="#onFileKeyPressed" onMouseClicked="#onFileClicked" prefHeight="200.0"
                                   prefWidth="200.0"/>
                     </content>
                 </Tab>

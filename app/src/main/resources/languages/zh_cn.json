@@ -81,6 +81,8 @@
         "git.noGit": "不是Git仓库, 是否创建?",
         "git.createBranch": "创建分支",
         "git.switchBranch": "切换分支",
-        "git.deleteBranch": "删除分支"
+        "git.deleteBranch": "删除分支",
+        "copy": "复制",
+        "copy.path": "复制路径"
     }
 }

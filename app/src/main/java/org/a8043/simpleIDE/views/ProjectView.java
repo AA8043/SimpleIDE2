@@ -32,11 +32,32 @@ import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ProjectView {
     public static final URL FXML_URL = ResourceUtil.getResource("ProjectView.fxml", ProjectView.class);
+    private static final List<FileMenuItemFactory> FILE_MENU_ITEM_LIST = new ArrayList<>();
+
+    public interface FileMenuItemFactory {
+        MenuItem create(List<File> fileList);
+    }
+
+    static {
+        register(fileList -> new MenuItem(ResourceManager.getText("copy")) {{
+            setOnAction(e -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.FILES, fileList)));
+        }});
+        register(fileList -> fileList.size() != 1 ? null : new MenuItem(ResourceManager.getText("copy.path")) {{
+            setOnAction(e -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT,
+                fileList.getFirst().getAbsolutePath())));
+        }});
+    }
+
+    public static void register(FileMenuItemFactory factory) {
+        FILE_MENU_ITEM_LIST.add(factory);
+    }
+
     private final ProjectEditor editor;
     private final List<Tab> tabHistory = new ArrayList<>();
     @FXML
@@ -121,6 +142,7 @@ public class ProjectView {
             }
         });
 
+        fileTreeView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         fileTreeView.setCellFactory(Util.createTreeCell(FileUtil::getDisplayItem));
         refreshFileTree();
 
@@ -242,6 +264,35 @@ public class ProjectView {
                 treeItem.getChildren().add(treeItem1);
             }
         }
+    }
+
+    @FXML
+    private void onFileKeyPressed(KeyEvent event) {
+        if (event.getCode() == KeyCode.ENTER) {
+            onFileClicked(new MouseEvent(MouseEvent.MOUSE_CLICKED, 0, 0, 0, 0,
+                MouseButton.PRIMARY, 2, false, false, false, false,
+                true, false, false, true,
+                false, false, null));
+        } else if (event.isControlDown() && event.getCode() == KeyCode.C) {
+            List<TreeItem<File>> selectedItems = fileTreeView.getSelectionModel().getSelectedItems();
+            if (!selectedItems.isEmpty()) {
+                Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.FILES,
+                    selectedItems.stream().map(TreeItem::getValue).toList()));
+            }
+        }
+    }
+
+    @FXML
+    private void openFileContextMenu(ContextMenuEvent event) {
+        List<TreeItem<File>> selectedItems = fileTreeView.getSelectionModel().getSelectedItems();
+        if (selectedItems.isEmpty()) {
+            return;
+        }
+        ContextMenu contextMenu = new ContextMenu();
+        contextMenu.getItems().addAll(FILE_MENU_ITEM_LIST.stream()
+            .map(factory -> factory.create(selectedItems.stream().map(TreeItem::getValue).toList()))
+            .filter(Objects::nonNull).toList());
+        contextMenu.show(fileTreeView, event.getScreenX(), event.getScreenY());
     }
 
     @FXML
