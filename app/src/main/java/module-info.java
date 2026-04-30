@@ -13,6 +13,7 @@ module SimpleIDE.main {
 
     requires maven.model;
     requires maven.invoker;
+    requires gradle.tooling.api;
     requires plexus.utils;
     requires org.eclipse.jgit;
 

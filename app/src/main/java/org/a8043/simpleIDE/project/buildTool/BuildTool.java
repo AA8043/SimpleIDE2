@@ -2,12 +2,10 @@ package org.a8043.simpleIDE.project.buildTool;
 
 import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.Value;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.ProjectModel;
 import org.a8043.simpleIDE.project.ProjectModule;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -38,17 +36,4 @@ public abstract class BuildTool {
     }
 
     public abstract Future<Integer> compile(Consumer<String> onOutput);
-
-    protected abstract List<ModuleRecord> getModuleList();
-
-    @Value
-    public static class ModuleRecord {
-        String name;
-        File dir;
-        Object extraInfo;
-
-        public enum Type {
-            NORMAL, UNNAMED
-        }
-    }
 }

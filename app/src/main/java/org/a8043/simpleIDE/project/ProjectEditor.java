@@ -64,7 +64,8 @@ public class ProjectEditor implements Closeable {
             throw new RuntimeException();
         }
 
-        buildTool = BuildToolType.recognition(project).newBuildTool(this);
+        BuildToolType buildToolType = BuildToolType.recognition(project);
+        buildTool = buildToolType.newBuildTool(this);
 
         configFile = new File(configDir, "editor.json");
         if (!configFile.exists()) {
@@ -98,7 +99,7 @@ public class ProjectEditor implements Closeable {
 
         modelFile = new File(configDir, "model.json");
         if (modelFile.exists()) {
-            projectModel = JSONUtil.toBean(FileUtil.readUtf8String(modelFile), ProjectModel.class);
+            projectModel = JSONUtil.toBean(FileUtil.readUtf8String(modelFile), buildToolType.getModelType());
         } else {
             projectModel = buildTool.sync(this);
         }

@@ -45,7 +45,6 @@ public class JavaFile extends FileEditor {
 
     public JavaFile(ControllableFile file, ProjectEditor editor) {
         super(file, editor);
-        // TODO: 模块、test目录
         File file1 = file.getFile();
         String relativePath = FileUtil.getRelativePath(FileUtil.findFileDirInFolders(editor.getProjectModel().getSrcDirList(),
             file1.getName()), file1);

@@ -20,7 +20,6 @@ import java.util.zip.ZipFile;
 @Getter
 @Setter
 public class Dependency {
-    private static final File MAVEN_LOCAL_REPOSITORY = new File(System.getProperty("user.home"), ".m2/repository");
     private String groupId;
     private String artifactId;
     private String version;
@@ -30,25 +29,6 @@ public class Dependency {
 
     public SourceZipGetter getSourceZip() {
         return new SourceZipGetter();
-    }
-
-    public static Dependency fromMaven(org.apache.maven.model.Dependency dependency) {
-        String groupId = dependency.getGroupId();
-        String artifactId = dependency.getArtifactId();
-        String version = dependency.getVersion();
-
-        File dir = new File(MAVEN_LOCAL_REPOSITORY,
-            groupId.replace(".", "/") + "/" +
-            artifactId + "/" + version);
-        String baseFileName = artifactId + "-" + version;
-        String classifier = dependency.getClassifier();
-        if (classifier != null && !classifier.isEmpty()) {
-            baseFileName += "-" + classifier;
-        }
-
-        String type = dependency.getType() != null ? dependency.getType() : "jar";
-        return new Dependency(groupId, artifactId, groupId + ":" + artifactId, version,
-            new File(dir, baseFileName + "." + type), new File(dir, baseFileName + "-sources.jar"));
     }
 
     public class SourceZipGetter {

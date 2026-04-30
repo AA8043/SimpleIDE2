@@ -28,6 +28,7 @@ import java.util.function.Consumer;
 @Slf4j
 @Getter
 public class Maven extends BuildTool {
+    private static final File MAVEN_LOCAL_REPOSITORY = new File(System.getProperty("user.home"), ".m2/repository");
     private final File pomFile;
 
     public Maven(ProjectEditor editor) {
@@ -36,26 +37,21 @@ public class Maven extends BuildTool {
     }
 
     @Override
-    public ProjectModel sync(ProjectEditor editor) {
+    public MavenModel sync(ProjectEditor editor) {
         Model model = getModel(pomFile);
-//        List<ProjectModule> moduleList = new ArrayList<>();
-//
-//        return new MavenModel(model.getGroupId(), model.getArtifactId(), model.getVersion(),
-//            dependencyList, moduleList, model);
-        AnalysisResult result = new AnalysisResult();
-        result.moduleList.addAll(getJdkModuleList(editor));
-        List<Dependency> dependencyList = model.getDependencies().stream().map(Dependency::fromMaven).toList();
-        result.moduleList.addAll(dependencyList.stream().map(dependency -> new ProjectModule(dependency.getModuleName(),
+        List<ProjectModule> moduleList = new ArrayList<>(getJdkModuleList(editor));
+        List<Dependency> dependencyList = model.getDependencies().stream().map(Maven::fromMaven).toList();
+        moduleList.addAll(dependencyList.stream().map(dependency -> new ProjectModule(dependency.getModuleName(),
             ProjectModule.Location.DEPENDENCY, List.of(), List.of(), List.of(), List.of(), List.of())).toList());
         parseModuleRecursively(model, editor.getProject().getProjectDir(),
-            ProjectModule.Location.PROJECT, result, new HashMap<>());
+            ProjectModule.Location.PROJECT, moduleList, new HashMap<>());
         return new MavenModel(model.getGroupId(), model.getArtifactId(), model.getVersion(),
-            result.dependencieList, result.moduleList, model);
+            dependencyList, moduleList, model);
     }
 
     @SneakyThrows
     private static void parseModuleRecursively(Model model, File baseDir, ProjectModule.Location location,
-                                               AnalysisResult result, Map<String, Model> parsedModels) {
+                                               List<ProjectModule> moduleList, Map<String, Model> parsedModels) {
         String moduleKey = model.getGroupId() + ":" + model.getArtifactId() + ":" + model.getVersion();
 
         if (parsedModels.containsKey(moduleKey)) {
@@ -64,23 +60,33 @@ public class Maven extends BuildTool {
         parsedModels.put(moduleKey, model);
 
         ProjectModule currentModule = extractModuleInfo(model, baseDir, location);
-        result.moduleList.add(currentModule);
-
-        if (model.getDependencies() != null) {
-            for (org.apache.maven.model.Dependency mvnDep : model.getDependencies()) {
-                if ("test".equals(mvnDep.getScope()) || "provided".equals(mvnDep.getScope())) {
-                    continue;
-                }
-                result.dependencieList.add(Dependency.fromMaven(mvnDep));
-            }
-        }
+        moduleList.add(currentModule);
 
         if (model.getModules() != null && !model.getModules().isEmpty()) {
             model.getModules().stream().map(modulePath -> new File(baseDir, modulePath + "/pom.xml"))
                 .filter(File::exists).forEach(modulePomFile ->
                     parseModuleRecursively(getModel(modulePomFile), modulePomFile.getParentFile(),
-                        ProjectModule.Location.PROJECT, result, parsedModels));
+                        ProjectModule.Location.PROJECT, moduleList, parsedModels));
         }
+    }
+
+    public static Dependency fromMaven(org.apache.maven.model.Dependency dependency) {
+        String groupId = dependency.getGroupId();
+        String artifactId = dependency.getArtifactId();
+        String version = dependency.getVersion();
+
+        File dir = new File(MAVEN_LOCAL_REPOSITORY,
+            groupId.replace(".", "/") + "/" +
+            artifactId + "/" + version);
+        String baseFileName = artifactId + "-" + version;
+        String classifier = dependency.getClassifier();
+        if (classifier != null && !classifier.isEmpty()) {
+            baseFileName += "-" + classifier;
+        }
+
+        String type = dependency.getType() != null ? dependency.getType() : "jar";
+        return new Dependency(groupId, artifactId, version, "",
+            new File(dir, baseFileName + "." + type), new File(dir, baseFileName + "-sources.jar"));
     }
 
     private static Model getModel(File pomFile) {
@@ -148,11 +154,6 @@ public class Maven extends BuildTool {
             srcDir, resourcesDir, testSrcDir, testResourcesDir);
     }
 
-    public static class AnalysisResult {
-        private final List<ProjectModule> moduleList = new ArrayList<>();
-        private final List<Dependency> dependencieList = new ArrayList<>();
-    }
-
     @Override
     public Future<Integer> compile(Consumer<String> onOutput) {
         CompletableFuture<Integer> future = new CompletableFuture<>();
@@ -188,19 +189,6 @@ public class Maven extends BuildTool {
         }).start();
     }
 
-    @Override
-    public List<ModuleRecord> getModuleList() {
-        return ((MavenModel) editor.getProjectModel()).getModel().getModules().stream().map(moduleName -> {
-            String[] split = moduleName.split("[/\\\\]");
-            String name = moduleName.split("[/\\\\]")[split.length - 1];
-            File dir = new File(getEditor().getProject().getProjectDir(), moduleName);
-
-            Model model = getModel(new File(dir, "pom.xml"));
-
-            return new ModuleRecord(name, dir, model);
-        }).toList();
-    }
-
     public static class MavenModel extends ProjectModel {
         @Getter
         @PropIgnore
@@ -214,18 +202,24 @@ public class Maven extends BuildTool {
     }
 
     public static class MavenType extends BuildToolType {
+        private static final String POM = ResourceUtil.readUtf8Str("fileTemplates/mavenPom.txt");
+
         @Override
         public String name() {
             return "MAVEN";
         }
 
         @Override
+        public Class<MavenModel> getModelType() {
+            return MavenModel.class;
+        }
+
+        @Override
         public void generateBuildScript(Project project, Jdk jdk, String groupId, String artifactId) {
-            String content = ResourceUtil.readUtf8Str("fileTemplates/mavenPom.xml")
-                .replace("{groupId}", groupId)
-                .replace("{artifactId}", artifactId)
-                .replace("{javaVersion}", jdk.getVersion().split("\\.")[0]);
-            FileUtil.writeUtf8String(content, new File(project.getProjectDir(), "pom.xml"));
+            FileUtil.writeUtf8String(POM.replace("{groupId}", groupId)
+                    .replace("{artifactId}", artifactId)
+                    .replace("{javaVersion}", jdk.getVersion().split("\\.")[0]),
+                new File(project.getProjectDir(), "pom.xml"));
         }
 
         @Override

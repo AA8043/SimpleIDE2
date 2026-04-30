@@ -1,0 +1,11 @@
+plugins {
+    id("java")
+}
+
+group = "{groupId}"
+version = "1.0-SNAPSHOT"
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}

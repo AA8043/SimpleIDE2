@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.ProjectModel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,9 +12,9 @@ import java.util.Objects;
 
 @AllArgsConstructor
 public abstract class BuildToolType {
-    public static final BuildToolType MAVEN = new Maven.MavenType();
-    public static final BuildToolType GRADLE = new Gradle.GradleType();
-    public static final BuildToolType UNKNOWN = new UnknownType();
+    public static final Maven.MavenType MAVEN = new Maven.MavenType();
+    public static final Gradle.GradleType GRADLE = new Gradle.GradleType();
+    public static final UnknownType UNKNOWN = new UnknownType();
     public static final List<BuildToolType> TYPE_LIST = new ArrayList<>();
 
     static {
@@ -32,6 +33,8 @@ public abstract class BuildToolType {
 
     public abstract String name();
 
+    public abstract Class<? extends ProjectModel> getModelType();
+
     public abstract void generateBuildScript(Project project, Jdk jdk, String groupId, String artifactId);
 
     public abstract BuildTool newBuildTool(ProjectEditor editor);
@@ -46,6 +49,11 @@ public abstract class BuildToolType {
         @Override
         public String name() {
             return "UNKNOWN";
+        }
+
+        @Override
+        public Class<ProjectModel> getModelType() {
+            return ProjectModel.class;
         }
 
         @Override
