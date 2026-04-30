@@ -49,6 +49,7 @@ public class ProjectEditor implements Closeable {
     private final JSONObject record;
     private final ObservableList<RunnableTask> runnableList = FXCollections.observableArrayList();
     private final List<ControllableFile> openedFileList = new ArrayList<>();
+    private final Thread autoSaveThread;
     private final ObservableList<Task<?>> taskList = FXCollections.observableArrayList();
     private final ExecutorService taskThreadPool = new ThreadPoolExecutor(5, 5,
         60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(10), Executors.defaultThreadFactory(),
@@ -116,12 +117,13 @@ public class ProjectEditor implements Closeable {
             }
         });
 
-        new Thread(() -> {
-            while (true) {
+        autoSaveThread = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
                 ThreadUtil.sleep(Main.instance.getSettings().getAutoSaveInterval());
                 saveFiles();
             }
-        }).start();
+        });
+        autoSaveThread.start();
     }
 
     public JavaParser getJavaParser() {
@@ -155,6 +157,7 @@ public class ProjectEditor implements Closeable {
         index.close();
         javaParserThreadLocal.remove();
         taskThreadPool.shutdownNow();
+        autoSaveThread.interrupt();
         saveFiles();
         saveConfig();
         OPENED_LIST.remove(this);
