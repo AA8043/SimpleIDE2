@@ -16,13 +16,15 @@ public class IndexPoint extends JSONSupport {
     private final Package pkg;
     @Setter(AccessLevel.PACKAGE)
     private IndexPoint parent;
+    private final Index index;
     private final List<MethodSignature> methodList = new ArrayList<>();
     private final List<FieldSignature> fieldList = new ArrayList<>();
 
-    public IndexPoint(String name, Package pkg, IndexPoint parent) {
+    public IndexPoint(String name, Package pkg, IndexPoint parent, Index index) {
         this.name = name;
         this.pkg = pkg;
         this.parent = parent;
+        this.index = index;
     }
 
     public String[] getPath() {
@@ -47,7 +49,7 @@ public class IndexPoint extends JSONSupport {
     }
 
     public boolean isBasicType() {
-        return pkg == null && parent == null;
+        return pkg.getModule() == index.getModuleList().get(1);
     }
 
     @Override

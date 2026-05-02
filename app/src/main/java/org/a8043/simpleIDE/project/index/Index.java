@@ -51,15 +51,15 @@ public class Index extends JSONSupport implements Closeable {
         this.editor = editor;
         Package basicTypePkg = moduleList.get(1).getPackageList().getFirst();
         basicTypeMap = Map.of(
-            "byte", new IndexPoint("byte", basicTypePkg, null),
-            "short", new IndexPoint("short", basicTypePkg, null),
-            "int", new IndexPoint("int", basicTypePkg, null),
-            "long", new IndexPoint("long", basicTypePkg, null),
-            "float", new IndexPoint("float", basicTypePkg, null),
-            "double", new IndexPoint("double", basicTypePkg, null),
-            "char", new IndexPoint("char", basicTypePkg, null),
-            "boolean", new IndexPoint("boolean", basicTypePkg, null),
-            "void", new IndexPoint("void", basicTypePkg, null)
+            "byte", new IndexPoint("byte", basicTypePkg, null, this),
+            "short", new IndexPoint("short", basicTypePkg, null, this),
+            "int", new IndexPoint("int", basicTypePkg, null, this),
+            "long", new IndexPoint("long", basicTypePkg, null, this),
+            "float", new IndexPoint("float", basicTypePkg, null, this),
+            "double", new IndexPoint("double", basicTypePkg, null, this),
+            "char", new IndexPoint("char", basicTypePkg, null, this),
+            "boolean", new IndexPoint("boolean", basicTypePkg, null, this),
+            "void", new IndexPoint("void", basicTypePkg, null, this)
         );
         indexList.addAll(basicTypeMap.values());
     }
@@ -128,7 +128,7 @@ public class Index extends JSONSupport implements Closeable {
         result.getResult().ifPresentOrElse(unit -> unit.getTypes().forEach(type -> {
             // TODO: 内部类
             IndexPoint point = new IndexPoint(type.getNameAsString(),
-                module.getOrCreatePackage(ArrayUtil.sub(path, 0, path.length - 1)), null);
+                module.getOrCreatePackage(ArrayUtil.sub(path, 0, path.length - 1)), null, this);
             indexList.add(point);
             type.getMethods().forEach(method -> {
                 Map<String, IncompleteType> parameterMap = new HashMap<>();
@@ -383,7 +383,11 @@ public class Index extends JSONSupport implements Closeable {
             String name = moduleJson.getStr("name");
             boolean isNormal = !name.equals("<unnamed>") && !name.equals("<basic>");
             Module module = isNormal ? new Module(projectModuleList.stream().filter(m -> m.getName().equals(name))
-                                                  .findFirst().orElseThrow(), index) : new Module(index);
+                                                  .findFirst().orElseThrow(), index) : switch (name) {
+                case "<unnamed>" -> index.getModuleList().getFirst();
+                case "<basic>" -> index.getModuleList().get(1);
+                default -> throw new RuntimeException();
+            };
             index.getModuleList().add(module);
             moduleJson.getJSONArray("packageList").forEach(nameObject ->
                 module.getOrCreatePackage(((String) nameObject).split("\\.")));
@@ -412,7 +416,8 @@ public class Index extends JSONSupport implements Closeable {
                 module = index.getModule(moduleName);
             }
             IndexPoint point = new IndexPoint(path[path.length - 1],
-                module.getPackage(ArrayUtil.sub(path, 0, path.length - 1)), null);
+                module.getPackage(ArrayUtil.sub(path, 0, path.length - 1)), null, index);
+            index.getIndexList().add(point);
             JSONObject parent = indexJson.getJSONObject("parent");
             if (parent != null) {
                 pointParentJsonMap.put(point, parent);
