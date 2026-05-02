@@ -5,6 +5,8 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.ZipUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONSupport;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.modules.ModuleRequiresDirective;
@@ -32,7 +34,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 @Slf4j
-public class Index implements Closeable {
+public class Index extends JSONSupport implements Closeable {
     @Getter
     private final ProjectEditor editor;
     @Getter
@@ -364,5 +366,68 @@ public class Index implements Closeable {
         String[] full = JavaUtil.getClassAbsolutePath(this, source, original, unit);
         boolean isIncomplete = full != null;
         return new IncompleteType(source, isIncomplete, isIncomplete ? full : new String[]{original});
+    }
+
+    @Override
+    public JSONObject toJSON() {
+        return new JSONObject().set("moduleList", moduleList).set("indexList", indexList);
+    }
+
+    public static Index convert(ProjectEditor editor, JSONObject json) {
+        Index index = new Index(editor);
+
+        List<ProjectModule> projectModuleList = editor.getProjectModel().getModuleList();
+        Map<Module, List<String>> requireNameListMap = new HashMap<>();
+        json.getJSONArray("moduleList").forEach(moduleJsonObject -> {
+            JSONObject moduleJson = (JSONObject) moduleJsonObject;
+            String name = moduleJson.getStr("name");
+            boolean isNormal = !name.equals("<unnamed>") && !name.equals("<basic>");
+            Module module = isNormal ? new Module(projectModuleList.stream().filter(m -> m.getName().equals(name))
+                                                  .findFirst().orElseThrow(), index) : new Module(index);
+            index.getModuleList().add(module);
+            moduleJson.getJSONArray("packageList").forEach(nameObject ->
+                module.getOrCreatePackage(((String) nameObject).split("\\.")));
+            if (isNormal) {
+                requireNameListMap.put(module, moduleJson.getJSONArray("requireList").toList(String.class));
+            }
+        });
+        requireNameListMap.forEach((module, requireNameList) -> requireNameList.forEach(requireName -> {
+            Module requireModule = index.getModule(requireName);
+            if (requireModule != null) {
+                module.addRequire(requireModule);
+            }
+        }));
+
+        Map<IndexPoint, JSONObject> pointParentJsonMap = new HashMap<>();
+        json.getJSONArray("indexList").forEach(indexJsonObject -> {
+            JSONObject indexJson = (JSONObject) indexJsonObject;
+            String[] path = indexJson.getStr("path").split("\\.");
+            String moduleName = indexJson.getStr("moduleName");
+            Module module;
+            if (moduleName.equals("<basic>")) {
+                module = index.getModuleList().get(1);
+            } else if (moduleName.equals("<unnamed>")) {
+                module = index.getModuleList().getFirst();
+            } else {
+                module = index.getModule(moduleName);
+            }
+            IndexPoint point = new IndexPoint(path[path.length - 1],
+                module.getPackage(ArrayUtil.sub(path, 0, path.length - 1)), null);
+            JSONObject parent = indexJson.getJSONObject("parent");
+            if (parent != null) {
+                pointParentJsonMap.put(point, parent);
+            }
+        });
+        pointParentJsonMap.forEach((point, parentName) -> {
+            IndexPoint parent = index.getIndexList().stream().filter(p ->
+                p.getName().equals(parentName.getStr("name")) &&
+                p.getPkg().getFullName().equals(parentName.getStr("package")) &&
+                p.getPkg().getModule().getProjectModule().getName().equals(parentName.getStr("moduleName"))
+            ).findFirst().orElseThrow();
+            point.setParent(parent);
+        });
+
+        index.getStandardLibraryZip();
+        return index;
     }
 }

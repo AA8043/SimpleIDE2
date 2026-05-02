@@ -1,6 +1,8 @@
 package org.a8043.simpleIDE.project.index;
 
 import cn.hutool.core.util.ArrayUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONSupport;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
@@ -11,11 +13,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-@EqualsAndHashCode
+@EqualsAndHashCode(callSuper = false)
 @ToString
-public class Module {
+public class Module extends JSONSupport {
     @Getter
-    private ProjectModule projectModule;
+    private final ProjectModule projectModule;
     @Getter
     private final List<Module> requireList;
     @Getter
@@ -26,7 +28,7 @@ public class Module {
         this.projectModule = projectModule;
         this.requireList = requireList;
         this.index = index;
-        packageList.add(new Package(index));
+        packageList.add(new Package(this, index));
     }
 
     public Module(Index index) {
@@ -87,4 +89,16 @@ public class Module {
         return packageList.stream().map(Package::getPoints).flatMap(List::stream).toList();
     }
 
+    public String getCacheName() {
+        return projectModule != null ? projectModule.getName() :
+            index.getModuleList().getFirst() == this ? "<unnamed>" :
+            index.getModuleList().get(1) == this ? "<basic>" : null;
+    }
+
+    @Override
+    public JSONObject toJSON() {
+        return new JSONObject().set("name", getCacheName()).set("requireList", requireList != null ?
+                requireList.stream().map(m -> m.getProjectModule().getName()).toList() : null)
+            .set("packageList", packageList.stream().map(Package::getFullName).toList());
+    }
 }

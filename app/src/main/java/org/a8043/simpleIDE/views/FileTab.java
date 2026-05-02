@@ -26,6 +26,7 @@ import javafx.scene.web.WebView;
 import javafx.util.Duration;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.fileEditor.*;
 import org.a8043.simpleIDE.project.ProjectEditor;
@@ -45,6 +46,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+@Slf4j
 public class FileTab {
     private static final URL FXML_URL = ResourceUtil.getResource("FileTab.fxml", FileTab.class);
     private static final Map<String, FileEditorFactory> FILE_TYPE_MAP = new HashMap<>();
@@ -84,6 +86,7 @@ public class FileTab {
                 .create(controllableFile, editor);
             isFailedToOpen = false;
         } catch (Exception e) {
+            log.error(e.getMessage(), e);
             isFailedToOpen = true;
             try {
                 fileEditor = FILE_TYPE_MAP.get("*").create(controllableFile, editor);

@@ -1,6 +1,8 @@
 package org.a8043.simpleIDE.project.index;
 
 import cn.hutool.core.util.ArrayUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONSupport;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
@@ -10,14 +12,14 @@ import java.util.List;
 @Getter
 @AllArgsConstructor
 @ToString(exclude = {"parent", "module", "index"})
-public class Package {
+public class Package extends JSONSupport {
     private final Module module;
     private final Package parent;
     private final String name;
     private final Index index;
 
-    public Package(Index index) {
-        this(null, null, null, index);
+    public Package(Module module, Index index) {
+        this(module, null, null, index);
     }
 
     public String getFullName() {
@@ -26,13 +28,10 @@ public class Package {
 
     public String[] getPath() {
         if (parent == null || parent.isRoot()) {
-            return new String[]{name};
+            return null;
         } else {
             String[] parentPath = parent.getPath();
-            String[] path = new String[parentPath.length + 1];
-            System.arraycopy(parentPath, 0, path, 0, parentPath.length);
-            path[parentPath.length] = name;
-            return path;
+            return ArrayUtil.addAll(parentPath != null ? parentPath : new String[]{}, new String[]{name});
         }
     }
 
@@ -46,5 +45,10 @@ public class Package {
 
     public IndexPoint getPoint(String name) {
         return getPoints().stream().filter(point -> point.getName().equals(name)).findFirst().orElse(null);
+    }
+
+    @Override
+    public JSONObject toJSON() {
+        return new JSONObject().set("name", name).set("parent", parent == null ? null : parent.getFullName());
     }
 }

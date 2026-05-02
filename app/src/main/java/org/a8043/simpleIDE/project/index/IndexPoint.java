@@ -1,18 +1,21 @@
 package org.a8043.simpleIDE.project.index;
 
 import cn.hutool.core.util.ArrayUtil;
-import lombok.Getter;
-import lombok.ToString;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONSupport;
+import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Getter
 @ToString(exclude = "fieldList")
-public class IndexPoint {
+@EqualsAndHashCode(callSuper = false)
+public class IndexPoint extends JSONSupport {
     private final String name;
     private final Package pkg;
-    private final IndexPoint parent;
+    @Setter(AccessLevel.PACKAGE)
+    private IndexPoint parent;
     private final List<MethodSignature> methodList = new ArrayList<>();
     private final List<FieldSignature> fieldList = new ArrayList<>();
 
@@ -45,5 +48,12 @@ public class IndexPoint {
 
     public boolean isBasicType() {
         return pkg == null && parent == null;
+    }
+
+    @Override
+    public JSONObject toJSON() {
+        return new JSONObject().set("path", ArrayUtil.join(getPath(), "."))
+            .set("moduleName", pkg.getModule().getCacheName())
+            .set("methodList", methodList).set("fieldList", fieldList);
     }
 }

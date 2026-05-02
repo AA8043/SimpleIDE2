@@ -1,10 +1,7 @@
 package org.a8043.simpleIDE.project.buildTool;
 
 import cn.hutool.core.util.ZipUtil;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.SneakyThrows;
+import lombok.*;
 import org.benf.cfr.reader.api.CfrDriver;
 import org.benf.cfr.reader.api.OutputSinkFactory;
 
@@ -19,6 +16,7 @@ import java.util.zip.ZipFile;
 @AllArgsConstructor
 @Getter
 @Setter
+@EqualsAndHashCode
 public class Dependency {
     private String groupId;
     private String artifactId;

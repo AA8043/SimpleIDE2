@@ -38,6 +38,7 @@ public class ProjectEditor implements Closeable {
     private final Project project;
     private final Jdk jdk;
     private final Index index;
+    private final File indexCacheFile;
     private ProjectModel projectModel;
     private final ThreadLocal<JavaParser> javaParserThreadLocal;
     private final File configDir;
@@ -94,7 +95,6 @@ public class ProjectEditor implements Closeable {
             .createTask(this, json)));
 
         jdk = Jdk.getJdk(config.getJdkPath());
-        index = new Index(this);
         javaParserThreadLocal = ThreadLocal.withInitial(() -> new JavaParser(new ParserConfiguration()
             .setLanguageLevel(jdk.getLanguageLevel()).setCharacterEncoding(StandardCharsets.UTF_8)));
 
@@ -103,6 +103,13 @@ public class ProjectEditor implements Closeable {
             projectModel = JSONUtil.toBean(FileUtil.readUtf8String(modelFile), buildToolType.getModelType());
         } else {
             projectModel = buildTool.sync(this);
+        }
+
+        indexCacheFile = new File(configDir, "indexCache.json");
+        if (indexCacheFile.exists()) {
+            index = Index.convert(this, new JSONObject(FileUtil.readUtf8String(indexCacheFile)));
+        } else {
+            index = new Index(this);
         }
 
         if (new File(project.getProjectDir(), ".git").exists()) {
@@ -171,6 +178,7 @@ public class ProjectEditor implements Closeable {
         config.getRunnableJsonList().clear();
         runnableList.forEach(runnable -> config.getRunnableJsonList().add(runnable.getJson()));
         FileUtil.writeUtf8String(new JSONObject(projectModel).toString(), modelFile);
+        FileUtil.writeUtf8String(index.toJSONString(), indexCacheFile);
         FileUtil.writeUtf8String(ConfigUtil.toJson(config).toString(), configFile);
         FileUtil.writeUtf8String(record.toString(), recordFile);
     }
