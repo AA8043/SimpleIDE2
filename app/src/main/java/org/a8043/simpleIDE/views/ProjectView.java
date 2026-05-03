@@ -19,6 +19,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.util.Callback;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
@@ -36,22 +37,28 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
+@Slf4j
 public class ProjectView {
     public static final URL FXML_URL = ResourceUtil.getResource("ProjectView.fxml", ProjectView.class);
     private static final List<FileMenuItemFactory> FILE_MENU_ITEM_LIST = new ArrayList<>();
 
     public interface FileMenuItemFactory {
-        MenuItem create(List<File> fileList);
+        MenuItem create(List<File> fileList, ProjectEditor editor);
     }
 
     static {
-        register(fileList -> new MenuItem(ResourceManager.getText("copy")) {{
+        register((fileList, editor) -> new MenuItem(ResourceManager.getText("copy")) {{
             setOnAction(e -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.FILES, fileList)));
         }});
-        register(fileList -> fileList.size() != 1 ? null : new MenuItem(ResourceManager.getText("copy.path")) {{
-            setOnAction(e -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT,
-                fileList.getFirst().getAbsolutePath())));
-        }});
+        register((fileList, editor) -> fileList.size() != 1 ? null :
+            new MenuItem(ResourceManager.getText("copy.path")) {{
+                setOnAction(e -> Clipboard.getSystemClipboard().setContent(Map.of(DataFormat.PLAIN_TEXT,
+                    fileList.getFirst().getAbsolutePath())));
+            }});
+        register((fileList, editor) -> fileList.size() != 1 || fileList.getFirst().isDirectory() ? null :
+            new MenuItem(ResourceManager.getText("fileConvert")) {{
+                setOnAction(e -> FileConvertModal.show(fileList.getFirst(), editor));
+            }});
     }
 
     public static void register(FileMenuItemFactory factory) {
@@ -238,9 +245,11 @@ public class ProjectView {
         editor.getTaskList().addListener((ListChangeListener<Task<?>>) c -> {
             while (c.next()) {
                 if (c.wasAdded()) {
-                    c.getAddedSubList().forEach(task -> task.setOnFailed(e -> Main.instance.showTipModal(
-                        ResourceManager.getText("task.failed") + ": " +
-                        task.getTitle() + "\n" + task.getException().getMessage())));
+                    c.getAddedSubList().forEach(task -> task.setOnFailed(e -> {
+                        log.error(task.getException().getMessage(), task.getException());
+                        Main.instance.showTipModal(ResourceManager.getText("task.failed") + ": " +
+                                                   task.getTitle() + "\n" + task.getException().getMessage());
+                    }));
                 }
             }
         });
@@ -290,7 +299,7 @@ public class ProjectView {
         }
         ContextMenu contextMenu = new ContextMenu();
         contextMenu.getItems().addAll(FILE_MENU_ITEM_LIST.stream()
-            .map(factory -> factory.create(selectedItems.stream().map(TreeItem::getValue).toList()))
+            .map(factory -> factory.create(selectedItems.stream().map(TreeItem::getValue).toList(), editor))
             .filter(Objects::nonNull).toList());
         contextMenu.show(fileTreeView, event.getScreenX(), event.getScreenY());
     }

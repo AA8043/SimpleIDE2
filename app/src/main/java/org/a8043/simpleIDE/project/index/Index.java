@@ -388,7 +388,9 @@ public class Index extends JSONSupport implements Closeable {
                 case "<basic>" -> index.getModuleList().get(1);
                 default -> throw new RuntimeException();
             };
-            index.getModuleList().add(module);
+            if (isNormal) {
+                index.getModuleList().add(module);
+            }
             moduleJson.getJSONArray("packageList").forEach(nameObject ->
                 module.getOrCreatePackage(((String) nameObject).split("\\.")));
             if (isNormal) {
@@ -415,8 +417,14 @@ public class Index extends JSONSupport implements Closeable {
             } else {
                 module = index.getModule(moduleName);
             }
-            IndexPoint point = new IndexPoint(path[path.length - 1],
-                module.getPackage(ArrayUtil.sub(path, 0, path.length - 1)), null, index);
+            Package pkg;
+            String[] pkgPath = ArrayUtil.sub(path, 0, path.length - 1);
+            if (pkgPath.length == 0) {
+                pkg = module.getPackageList().getFirst();
+            } else {
+                pkg = module.getPackage(pkgPath);
+            }
+            IndexPoint point = new IndexPoint(path[path.length - 1], pkg, null, index);
             index.getIndexList().add(point);
             JSONObject parent = indexJson.getJSONObject("parent");
             if (parent != null) {

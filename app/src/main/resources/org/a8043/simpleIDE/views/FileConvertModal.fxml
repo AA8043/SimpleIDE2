@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<VBox xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="org.a8043.simpleIDE.views.FileConvertModal">
+    <children>
+        <HBox>
+            <children>
+                <Label fx:id="originalFileLabel" maxHeight="1.7976931348623157E308"/>
+                <Label maxHeight="1.7976931348623157E308" text=" -&gt; "/>
+                <ComboBox fx:id="converterBox" maxWidth="1.7976931348623157E308" onAction="#switchConverter"/>
+            </children>
+        </HBox>
+        <Separator maxWidth="1.7976931348623157E308"/>
+        <ScrollPane maxWidth="1.7976931348623157E308">
+            <content>
+                <VBox fx:id="configBox" maxWidth="1.7976931348623157E308"/>
+            </content>
+        </ScrollPane>
+        <Separator maxWidth="1.7976931348623157E308"/>
+        <HBox alignment="CENTER_RIGHT">
+            <children>
+                <CheckBox fx:id="coverBox" mnemonicParsing="false" text="fileConvert.cover"/>
+                <Button mnemonicParsing="false" onAction="#convert" text="fileConvert.convert"/>
+                <Button mnemonicParsing="false" onAction="#close" text="cancel"/>
+            </children>
+        </HBox>
+    </children>
+</VBox>

@@ -83,6 +83,11 @@
         "git.switchBranch": "切换分支",
         "git.deleteBranch": "删除分支",
         "copy": "复制",
-        "copy.path": "复制路径"
+        "copy.path": "复制路径",
+        "fileConvert": "转换文件",
+        "fileConvert.cover": "覆盖",
+        "fileConvert.hierarchicalStructure": "层次结构",
+        "fileConvert.hierarchicalDelimiter": "层分隔符",
+        "fileConvert.convert": "转换"
     }
 }
