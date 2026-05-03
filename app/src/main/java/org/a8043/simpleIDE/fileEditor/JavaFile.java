@@ -23,6 +23,7 @@ import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.MethodSignature;
+import org.a8043.simpleIDE.project.index.Module;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.FileUtil;
 import org.a8043.simpleIDE.util.FixedList;
@@ -49,7 +50,7 @@ public class JavaFile extends FileEditor {
         String relativePath = FileUtil.getRelativePath(FileUtil.findFileDirInFolders(editor.getProjectModel().getSrcDirList(),
             file1.getName()), file1);
         String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
-        indexPoint = JavaUtil.resolveModuleByPath(getEditor().getIndex(), indexPoint, path)
+        indexPoint = JavaUtil.resolveModuleByPath(getEditor().getIndex(), path)
             .getPackage(ArrayUtil.sub(path, 0, path.length - 1)).getPoints().stream()
             .filter(point -> point.getName().equals(path[path.length - 1])).findFirst().orElse(null);
     }
@@ -329,8 +330,7 @@ public class JavaFile extends FileEditor {
                     IndexPoint lastPoint = lastPointList.getLast();
                     lastPointList.add(switch (expr) {
                         case MethodCallExpr methodCallExpr -> {
-                            List<MethodSignature> methodList =
-                                lastPoint.getMethodList(methodCallExpr.getNameAsString());
+                            List<MethodSignature> methodList = lastPoint.getMethodList(methodCallExpr.getNameAsString());
                             if (methodList.isEmpty()) {
                                 yield null;
                             }
@@ -344,8 +344,8 @@ public class JavaFile extends FileEditor {
                         case NameExpr nameExpr -> {
                             String[] classPath = JavaUtil.getClassAbsolutePath(getEditor().getIndex(),
                                 lastPoint, nameExpr.getNameAsString(), compilationUnit);
-                            yield JavaUtil.resolveModuleByPath(getEditor().getIndex(), lastPoint, classPath)
-                                .getPoints().stream()
+                            Module module = JavaUtil.resolveModuleByPath(getEditor().getIndex(), lastPoint, classPath);
+                            yield Objects.requireNonNull(module).getPoints().stream()
                                 .filter(point -> ArrayUtil.equals(point.getPath(), classPath))
                                 .findFirst().orElse(null);
                         }

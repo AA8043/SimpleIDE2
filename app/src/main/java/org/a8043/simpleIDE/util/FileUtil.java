@@ -22,7 +22,7 @@ public class FileUtil {
     private static final Map<String, Image> FILE_IMAGE_CACHE = new HashMap<>();
 
     public static String getRelativePath(File base, File full) {
-        return base.toPath().relativize(full.toPath()).toString();
+        return base.toPath().relativize(full.toPath()).toString().replace("\\", "/");
     }
 
     public static File findFileDirInFolders(List<File> srcDirList, String name) {

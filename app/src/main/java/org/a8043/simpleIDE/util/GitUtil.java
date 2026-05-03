@@ -66,8 +66,7 @@ public class GitUtil {
             return;
         }
         ObjectProperty<FileStatus> statusProperty = FILE_STATUS_MAP.get(file);
-        String relativePath = org.a8043.simpleIDE.util.FileUtil.getRelativePath(
-            git.getRepository().getWorkTree(), file).replace("\\", "/");
+        String relativePath = org.a8043.simpleIDE.util.FileUtil.getRelativePath(git.getRepository().getWorkTree(), file);
         Status status = git.status().addPath(relativePath).call();
         if (status.getAdded().contains(relativePath)) {
             statusProperty.set(FileStatus.ADDED);
@@ -110,8 +109,7 @@ public class GitUtil {
 
         List<String> addArgList = new ArrayList<>(DEFAULT_ARG_LIST);
         addArgList.addAll(List.of("add", "--ignore-errors", "-A", "-f", "--"));
-        fileList.forEach(file -> addArgList.add(org.a8043.simpleIDE.util.FileUtil.getRelativePath(dir, file)
-            .replace("\\", "/")));
+        fileList.forEach(file -> addArgList.add(org.a8043.simpleIDE.util.FileUtil.getRelativePath(dir, file)));
         run.accept(addArgList);
 
         List<String> commitArgList = new ArrayList<>(DEFAULT_ARG_LIST);

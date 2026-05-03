@@ -14,6 +14,13 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class JavaUtil {
+    public static Module resolveModuleByPath(Index index, String[] path) {
+        if (index == null || path == null) {
+            return null;
+        }
+        return index.getModuleList().stream().filter(module -> module.hasPoint(path)).findFirst().orElse(null);
+    }
+
     public static Module resolveModuleByPath(Index index, IndexPoint source, String[] path) {
         if (index == null || source == null || path == null) {
             return null;

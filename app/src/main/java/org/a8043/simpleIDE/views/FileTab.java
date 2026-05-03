@@ -285,7 +285,13 @@ public class FileTab {
 
         timer.setOnFinished(event -> {
             if (lastHoverPosition.get() >= 0) {
-                String markdown = fileEditor.computeHoverTip(lastHoverPosition.get());
+                String markdown;
+                try {
+                    markdown = fileEditor.computeHoverTip(lastHoverPosition.get());
+                } catch (Exception e) {
+                    log.error(e.getMessage(), e);
+                    markdown = ResourceManager.getText("fileTab.failedToComputeHoverTip");
+                }
                 if (!markdown.isEmpty()) {
                     String html;
                     try {
