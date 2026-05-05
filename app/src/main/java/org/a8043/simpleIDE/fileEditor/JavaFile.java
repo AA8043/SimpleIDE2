@@ -12,6 +12,7 @@ import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.*;
@@ -19,6 +20,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.github.javaparser.javadoc.Javadoc;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.index.IndexPoint;
@@ -37,6 +39,9 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class JavaFile extends FileEditor {
     public static final String STYLE = ResourceUtil.readUtf8Str("styles/JavaHighlighter.css");
@@ -47,8 +52,8 @@ public class JavaFile extends FileEditor {
     public JavaFile(ControllableFile file, ProjectEditor editor) {
         super(file, editor);
         File file1 = file.getFile();
-        String relativePath = FileUtil.getRelativePath(FileUtil.findFileDirInFolders(editor.getProjectModel().getSrcDirList(),
-            file1.getName()), file1);
+        String relativePath = FileUtil.getRelativePath(
+            FileUtil.findFileDirInFolders(editor.getProjectModel().getSrcDirList(), file1.getName()), file1);
         String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
         indexPoint = JavaUtil.resolveModuleByPath(getEditor().getIndex(), path)
             .getPackage(ArrayUtil.sub(path, 0, path.length - 1)).getPoints().stream()
@@ -60,6 +65,10 @@ public class JavaFile extends FileEditor {
     }
 
     public CompilationUnit getLatestCompilationUnit() {
+        return getLatestParseResult().getResult().orElse(null);
+    }
+
+    public CompilationUnit getLatestSuccessfulCompilationUnit() {
         AtomicReference<CompilationUnit> result = new AtomicReference<>();
         CollUtil.reverseNew(parseResultHistoryList).forEach(parseResult -> {
             if (result.get() == null) {
@@ -71,18 +80,20 @@ public class JavaFile extends FileEditor {
 
     @Override
     public List<CompleteItem> computeCompletion(int caretPosition) {
-        List<CompleteItem> itemList = new ArrayList<>();
-        CompilationUnit compilationUnit = getLatestCompilationUnit();
-        if (compilationUnit != null && !isPositionInString(compilationUnit, caretPosition)) {
-            // TODO: 计算补全
-            String keyword = getContent().substring(findLastChar(caretPosition, '.', ';') + 1, caretPosition);
-            List<IndexPoint> searchResult = SearchUtil.search(getEditor().getIndex().getIndexList(),
-                IndexPoint::getName, keyword);
-            ListUtil.sub(searchResult, 0, 100).forEach(indexPoint -> {
-                itemList.add(new CompleteItem(indexPoint, caretPosition, caretPosition));
-            });
+        CompilationUnit latestCompilationUnit = getLatestCompilationUnit();
+        if (latestCompilationUnit != null && isPositionInString(latestCompilationUnit, caretPosition)) {
+            return new ArrayList<>();
         }
-        return itemList;
+
+        CompletionContext context = createCompletionContext(caretPosition);
+        TextCompletionContext textContext = createTextCompletionContext(caretPosition);
+        if (context.isMemberCompletion()) {
+            List<CompleteItem> memberItems = computeMemberCompletion(textContext, context);
+            if (!memberItems.isEmpty()) {
+                return memberItems;
+            }
+        }
+        return computeGlobalCompletion(textContext, context);
     }
 
     private int findLastChar(int position, char... c) {
@@ -95,6 +106,464 @@ public class JavaFile extends FileEditor {
             }
         }
         return -1;
+    }
+
+    private CompletionContext createCompletionContext(int caretPosition) {
+        int scopeStart = findLastChar(caretPosition, '.', ';');
+        return new CompletionContext(caretPosition, scopeStart, getContent().substring(scopeStart + 1, caretPosition));
+    }
+
+    private TextCompletionContext createTextCompletionContext(int caretPosition) {
+        String content = getContent();
+        ClassTextMembers classMembers = collectCurrentClassMembers(content);
+        MethodTextMembers methodMembers = collectCurrentMethodMembers(content, caretPosition);
+        return new TextCompletionContext(content, classMembers, methodMembers);
+    }
+
+    private List<CompleteItem> computeMemberCompletion(TextCompletionContext textContext, CompletionContext context) {
+        String scopeText = extractCompletionScopeText(context.getScopeStart());
+        TextMember typeMember = textContext.findTypeMember(scopeText);
+        if (typeMember != null && typeMember.getTypeName() != null) {
+            IndexPoint scopeType = resolveType(typeMember.getTypeName(), getLatestSuccessfulCompilationUnit());
+            if (scopeType != null) {
+                return createMemberCompletionItems(scopeType, context);
+            }
+        }
+
+        if ("this".equals(scopeText)) {
+            return createCurrentClassMemberItems(textContext, context);
+        }
+        return List.of();
+    }
+
+    private List<CompleteItem> computeGlobalCompletion(TextCompletionContext textContext, CompletionContext context) {
+        List<CompleteItem> itemList = new ArrayList<>(createVisibleTextCompletionItems(textContext, context));
+        List<IndexPoint> searchResult = SearchUtil.search(getEditor().getIndex().getIndexList(),
+            IndexPoint::getName, context.getKeyword());
+        Set<String> added = new HashSet<>();
+        itemList.forEach(item -> added.add(item.getText()));
+        ListUtil.sub(searchResult, 0, 100).forEach(indexPoint -> {
+            if (added.add(indexPoint.getName())) {
+                itemList.add(new CompleteItem(indexPoint, context.getCaretPosition(), context.getReplaceStart()));
+            }
+        });
+        return itemList;
+    }
+
+    private Expression findCompletionScopeExpression(CompilationUnit compilationUnit, int dotPosition) {
+        AtomicReference<Expression> result = new AtomicReference<>();
+        compilationUnit.accept(new VoidVisitorAdapter<Void>() {
+            @Override
+            public void visit(FieldAccessExpr n, Void arg) {
+                n.getName().getRange().ifPresent(range -> {
+                    int start = getPosition(range.begin, getContent());
+                    if (start - 1 == dotPosition) {
+                        result.set(n.getScope());
+                    }
+                });
+                if (result.get() == null) {
+                    super.visit(n, arg);
+                }
+            }
+
+            @Override
+            public void visit(MethodCallExpr n, Void arg) {
+                n.getName().getRange().ifPresent(range -> {
+                    int start = getPosition(range.begin, getContent());
+                    if (start - 1 == dotPosition) {
+                        result.set(n.getScope().orElse(null));
+                    }
+                });
+                if (result.get() == null) {
+                    super.visit(n, arg);
+                }
+            }
+        }, null);
+        return result.get();
+    }
+
+    private Expression parseCompletionScopeExpression(int dotPosition) {
+        String scopeText = extractCompletionScopeText(dotPosition);
+        if (scopeText.isBlank()) {
+            return null;
+        }
+        ParseResult<Expression> parseResult = new JavaParser().parse(ParseStart.EXPRESSION,
+            Providers.provider(scopeText));
+        return parseResult.getResult().orElse(null);
+    }
+
+    private String extractCompletionScopeText(int dotPosition) {
+        String content = getContent();
+        int end = dotPosition;
+        int start = dotPosition - 1;
+        int parenthesesDepth = 0;
+        int bracketDepth = 0;
+        int braceDepth = 0;
+        while (start >= 0) {
+            char ch = content.charAt(start);
+            switch (ch) {
+                case ')' -> parenthesesDepth++;
+                case ']' -> bracketDepth++;
+                case '}' -> braceDepth++;
+                case '(' -> {
+                    if (parenthesesDepth == 0) {
+                        return content.substring(start + 1, end).trim();
+                    }
+                    parenthesesDepth--;
+                }
+                case '[' -> {
+                    if (bracketDepth == 0) {
+                        return content.substring(start + 1, end).trim();
+                    }
+                    bracketDepth--;
+                }
+                case '{' -> {
+                    if (braceDepth == 0) {
+                        return content.substring(start + 1, end).trim();
+                    }
+                    braceDepth--;
+                }
+                default -> {
+                    if (parenthesesDepth == 0 && bracketDepth == 0 && braceDepth == 0 &&
+                        isCompletionScopeBoundary(ch)) {
+                        return content.substring(start + 1, end).trim();
+                    }
+                }
+            }
+            start--;
+        }
+        return content.substring(0, end).trim();
+    }
+
+    private ClassTextMembers collectCurrentClassMembers(String content) {
+        List<TextMember> fieldList = new ArrayList<>();
+        List<TextMember> methodList = new ArrayList<>();
+        Matcher matcher = Pattern.compile("([\\w<>\\[\\],.?]+)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\(|[;=])")
+            .matcher(content);
+        while (matcher.find()) {
+            String typeName = matcher.group(1);
+            String name = matcher.group(2);
+            String tail = matcher.group(3);
+            if ("(".equals(tail)) {
+                methodList.add(new TextMember(name, null, "method"));
+            } else {
+                fieldList.add(new TextMember(name, normalizeTypeName(typeName), "field"));
+            }
+        }
+        return new ClassTextMembers(fieldList, methodList);
+    }
+
+    private MethodTextMembers collectCurrentMethodMembers(String content, int caretPosition) {
+        String beforeCaret = content.substring(0, caretPosition);
+        int methodBodyStart = beforeCaret.lastIndexOf('{');
+        if (methodBodyStart < 0) {
+            return new MethodTextMembers(new ArrayList<>(), new ArrayList<>());
+        }
+
+        int signatureStart = findMethodSignatureStart(beforeCaret, methodBodyStart);
+        if (signatureStart < 0) {
+            return new MethodTextMembers(new ArrayList<>(), new ArrayList<>());
+        }
+
+        String signatureText = beforeCaret.substring(signatureStart, methodBodyStart);
+        String parameterText = extractMethodParameterText(signatureText);
+        return new MethodTextMembers(collectParameters(parameterText),
+            collectLocalVariables(beforeCaret.substring(methodBodyStart + 1)));
+    }
+
+    private int findMethodSignatureStart(String beforeCaret, int methodBodyStart) {
+        for (int i = methodBodyStart - 1; i >= 0; i--) {
+            char ch = beforeCaret.charAt(i);
+            if (ch == ';' || ch == '}' || ch == '{') {
+                return i + 1;
+            }
+        }
+        return 0;
+    }
+
+    private String extractMethodParameterText(String signatureText) {
+        int parameterStart = signatureText.indexOf('(');
+        int parameterEnd = signatureText.lastIndexOf(')');
+        if (parameterStart < 0 || parameterEnd <= parameterStart) {
+            return "";
+        }
+        return signatureText.substring(parameterStart + 1, parameterEnd);
+    }
+
+    private List<TextMember> collectParameters(String parameterText) {
+        List<TextMember> parameterList = new ArrayList<>();
+        for (String parameter : splitParameters(parameterText)) {
+            String trimmed = parameter.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            String[] parts = trimmed.split("\\s+");
+            if (parts.length >= 2) {
+                parameterList.add(new TextMember(parts[parts.length - 1],
+                    normalizeTypeName(String.join(" ", Arrays.copyOf(parts, parts.length - 1))), "variable"));
+            }
+        }
+        return parameterList;
+    }
+
+    private List<String> splitParameters(String parameterText) {
+        List<String> parameters = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int genericDepth = 0;
+        for (int i = 0; i < parameterText.length(); i++) {
+            char ch = parameterText.charAt(i);
+            if (ch == '<') {
+                genericDepth++;
+            } else if (ch == '>') {
+                genericDepth = Math.max(0, genericDepth - 1);
+            }
+            if (ch == ',' && genericDepth == 0) {
+                parameters.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        if (!current.isEmpty()) {
+            parameters.add(current.toString());
+        }
+        return parameters;
+    }
+
+    private List<TextMember> collectLocalVariables(String methodBodyText) {
+        List<TextMember> localVariableList = new ArrayList<>();
+        Matcher matcher = Pattern.compile("([\\w<>\\[\\],.?]+)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=|;)")
+            .matcher(methodBodyText);
+        while (matcher.find()) {
+            localVariableList.add(new TextMember(matcher.group(2), normalizeTypeName(matcher.group(1)), "variable"));
+        }
+        return localVariableList;
+    }
+
+    private String normalizeTypeName(String typeName) {
+        return typeName.replace("final ", "").replace("...", "[]").trim();
+    }
+
+    private List<CompleteItem> createVisibleTextCompletionItems(TextCompletionContext textContext,
+                                                                CompletionContext context) {
+        List<TextMember> visibleMembers = new ArrayList<>();
+        visibleMembers.addAll(textContext.getClassMembers().getFieldList());
+        visibleMembers.addAll(textContext.getClassMembers().getMethodList());
+        visibleMembers.addAll(textContext.getMethodMembers().getParameterList());
+        visibleMembers.addAll(textContext.getMethodMembers().getLocalVariableList());
+        List<TextMember> searchResult = SearchUtil.search(visibleMembers, TextMember::getName, context.getKeyword());
+        List<CompleteItem> itemList = new ArrayList<>();
+        Set<String> added = new HashSet<>();
+        ListUtil.sub(searchResult, 0, 100).forEach(member -> {
+            if (added.add(member.getName())) {
+                itemList.add(new CompleteItem(member.getKind(), member.getName(),
+                    member.getTypeName() != null ? member.getTypeName() : ".",
+                    context.getCaretPosition(), context.getReplaceStart(), member.getName()));
+            }
+        });
+        return itemList;
+    }
+
+    private List<CompleteItem> createCurrentClassMemberItems(TextCompletionContext textContext, CompletionContext context) {
+        List<TextMember> currentClassMembers = new ArrayList<>();
+        currentClassMembers.addAll(textContext.getClassMembers().getFieldList());
+        currentClassMembers.addAll(textContext.getClassMembers().getMethodList());
+        List<TextMember> searchResult = SearchUtil.search(currentClassMembers, TextMember::getName, context.getKeyword());
+        List<CompleteItem> itemList = new ArrayList<>();
+        Set<String> added = new HashSet<>();
+        ListUtil.sub(searchResult, 0, 100).forEach(member -> {
+            if (added.add(member.getName())) {
+                itemList.add(new CompleteItem(member.getKind(), member.getName(),
+                    member.getTypeName() != null ? member.getTypeName() : ".",
+                    context.getCaretPosition(), context.getReplaceStart(), member.getName()));
+            }
+        });
+        return itemList;
+    }
+
+    private boolean isCompletionScopeBoundary(char ch) {
+        return Character.isWhitespace(ch) || ch == ';' || ch == ',' || ch == '=' || ch == '+' || ch == '-' ||
+               ch == '*' || ch == '/' || ch == '%' || ch == '&' || ch == '|' || ch == '^' || ch == '!' ||
+               ch == '?' || ch == ':' || ch == '<' || ch == '>';
+    }
+
+    private IndexPoint resolveExpressionType(Expression expression, CompilationUnit compilationUnit) {
+        return switch (expression) {
+            case NameExpr nameExpr -> resolveNameExprType(nameExpr, compilationUnit);
+            case MethodCallExpr methodCallExpr -> {
+                IndexPoint scopeType = methodCallExpr.getScope()
+                    .map(scope -> resolveExpressionType(scope, compilationUnit)).orElse(indexPoint);
+                if (scopeType == null) {
+                    yield null;
+                }
+                List<MethodSignature> methodList = scopeType.getMethodList(methodCallExpr.getNameAsString());
+                yield methodList.isEmpty() ? null : methodList.getFirst().getReturnType();
+            }
+            case FieldAccessExpr fieldAccessExpr -> {
+                IndexPoint scopeType = resolveExpressionType(fieldAccessExpr.getScope(), compilationUnit);
+                if (scopeType == null) {
+                    yield null;
+                }
+                var field = scopeType.getField(fieldAccessExpr.getNameAsString());
+                yield field != null ? field.getType() : null;
+            }
+            default -> null;
+        };
+    }
+
+    private IndexPoint resolveNameExprType(NameExpr nameExpr, CompilationUnit compilationUnit) {
+        String name = nameExpr.getNameAsString();
+        MethodDeclaration method = nameExpr.findAncestor(MethodDeclaration.class).orElse(null);
+        if (method != null) {
+            IndexPoint parameterType = method.getParameterByName(name)
+                .map(parameter -> resolveType(parameter.getType().asString(), compilationUnit))
+                .orElse(null);
+            if (parameterType != null) {
+                return parameterType;
+            }
+
+            Optional<VariableDeclarator> variable = method.findAll(VariableDeclarator.class).stream()
+                .filter(declarator -> declarator.getNameAsString().equals(name))
+                .filter(declarator -> {
+                    int variablePosition = declarator.getName().getRange()
+                        .map(range -> getPosition(range.begin, getContent()))
+                        .orElse(Integer.MAX_VALUE);
+                    int currentPosition = nameExpr.getName().getRange()
+                        .map(range -> getPosition(range.begin, getContent()))
+                        .orElse(Integer.MIN_VALUE);
+                    return variablePosition <= currentPosition;
+                })
+                .max(Comparator.comparingInt(declarator -> declarator.getName().getRange()
+                    .map(range -> getPosition(range.begin, getContent())).orElse(-1)));
+            if (variable.isPresent()) {
+                IndexPoint variableType = resolveType(variable.get().getType().asString(), compilationUnit);
+                if (variableType != null) {
+                    return variableType;
+                }
+            }
+        }
+
+        if (indexPoint != null) {
+            IndexPoint currentFileFieldType = indexPoint.getField(name) != null ? indexPoint.getField(name).getType() : null;
+            if (currentFileFieldType != null) {
+                return currentFileFieldType;
+            }
+        }
+
+        IndexPoint indexedType = resolveIndexedVariableType(name);
+        if (indexedType != null) {
+            return indexedType;
+        }
+
+        return resolveType(name, compilationUnit);
+    }
+
+    private IndexPoint resolveIndexedVariableType(String name) {
+        return getEditor().getIndex().getIndexList().stream()
+            .flatMap(point -> point.getMethodList().stream())
+            .filter(methodSignature -> methodSignature.getParameterMap() != null)
+            .map(methodSignature -> methodSignature.getParameterMap().get(name))
+            .filter(Objects::nonNull)
+            .findFirst().orElse(null);
+    }
+
+    private IndexPoint resolveType(String typeName, CompilationUnit compilationUnit) {
+        String normalizedTypeName = typeName.replace("[]", "");
+        String[] classPath = JavaUtil.getClassAbsolutePath(getEditor().getIndex(), indexPoint,
+            normalizedTypeName, compilationUnit);
+        if (classPath == null) {
+            return null;
+        }
+        Module module = JavaUtil.resolveModuleByPath(getEditor().getIndex(), indexPoint, classPath);
+        return module != null ? module.getPoint(classPath) : null;
+    }
+
+    private void addMemberCompletionItems(List<CompleteItem> itemList, IndexPoint scopeType,
+                                          int caretPosition, int start, String keyword) {
+        List<MemberCompletion> memberList = new ArrayList<>();
+        scopeType.getFieldList().forEach(field -> memberList.add(new MemberCompletion(field.getName(),
+            new CompleteItem("field", field.getName(),
+                field.getType() != null ? StrUtil.join(".", (Object[]) field.getType().getPath()) : "void",
+                caretPosition, start, field.getName()))));
+        scopeType.getMethodList().forEach(method -> memberList.add(new MemberCompletion(method.getName(),
+            new CompleteItem("method", method.getName(), method.getReturnType() != null ?
+                StrUtil.join(".", (Object[]) method.getReturnType().getPath()) : "void",
+                caretPosition, start, method.getName()))));
+
+        List<MemberCompletion> searchResult = SearchUtil.search(memberList, MemberCompletion::getKeyword, keyword);
+        Set<String> added = new HashSet<>();
+        ListUtil.sub(searchResult, 0, 100).forEach(member -> {
+            if (added.add(member.getKeyword())) {
+                itemList.add(member.getItem());
+            }
+        });
+    }
+
+    private List<CompleteItem> createMemberCompletionItems(IndexPoint scopeType, CompletionContext context) {
+        List<CompleteItem> itemList = new ArrayList<>();
+        addMemberCompletionItems(itemList, scopeType,
+            context.getCaretPosition(), context.getReplaceStart(), context.getKeyword());
+        return itemList;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class CompletionContext {
+        private final int caretPosition;
+        private final int scopeStart;
+        private final String keyword;
+
+        private boolean isMemberCompletion() {
+            return scopeStart >= 0;
+        }
+
+        private int getReplaceStart() {
+            return scopeStart >= 0 ? scopeStart + 1 : caretPosition;
+        }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class TextCompletionContext {
+        private final String content;
+        private final ClassTextMembers classMembers;
+        private final MethodTextMembers methodMembers;
+
+        private TextMember findTypeMember(String name) {
+            return Stream.concat(methodMembers.getLocalVariableList().stream(),
+                    Stream.concat(methodMembers.getParameterList().stream(), classMembers.getFieldList().stream()))
+                .filter(member -> member.getName().equals(name))
+                .findFirst().orElse(null);
+        }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class ClassTextMembers {
+        private final List<TextMember> fieldList;
+        private final List<TextMember> methodList;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class MethodTextMembers {
+        private final List<TextMember> parameterList;
+        private final List<TextMember> localVariableList;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class TextMember {
+        private final String name;
+        private final String typeName;
+        private final String kind;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class MemberCompletion {
+        private final String keyword;
+        private final CompleteItem item;
     }
 
     private static boolean isPositionInString(CompilationUnit compilationUnit, int position) {
