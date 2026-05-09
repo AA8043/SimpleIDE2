@@ -47,10 +47,12 @@
 
 .list-view .list-cell:hover {
     -fx-background-color: rgb(57, 59, 64);
+    -fx-background-radius: 5px;
 }
 
 .list-view .list-cell:selected {
     -fx-background-color: rgb(46, 67, 110);
+    -fx-background-radius: 5px;
 }
 
 /* button */
@@ -61,6 +63,7 @@
 
 .button:hover {
     -fx-background-color: rgb(57, 59, 64);
+    -fx-background-radius: 5px;
 }
 
 /* tree */
@@ -73,10 +76,12 @@
 
 .tree-cell:hover {
     -fx-background-color: rgb(57, 59, 64);
+    -fx-background-radius: 5px;
 }
 
 .tree-cell:selected {
     -fx-background-color: rgb(37, 50, 77);
+    -fx-background-radius: 5px;
 }
 
 /* tab */
@@ -93,11 +98,13 @@
 
 .tab:hover {
     -fx-background-color: rgb(57, 59, 64);
+    -fx-background-radius: 5px;
 }
 
 .tab:selected {
     -fx-border-color: rgb(49, 75, 126);
     -fx-background-color: rgb(37, 50, 77);
+    -fx-background-radius: 5px;
 }
 
 /* code editor */
@@ -109,6 +116,11 @@
 
 .code-area .caret {
     -fx-stroke: white;
+}
+
+.lineno {
+    -fx-background-color: rgb(38, 40, 43);
+    -fx-font-style: normal;
 }
 
 .code-editor-tool-bar {

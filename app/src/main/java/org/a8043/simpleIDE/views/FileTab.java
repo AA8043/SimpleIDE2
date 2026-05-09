@@ -34,6 +34,7 @@ import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.Util;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
+import org.fxmisc.richtext.LineNumberFactory;
 import org.markdown4j.Markdown4jProcessor;
 
 import java.io.File;
@@ -110,6 +111,7 @@ public class FileTab {
         VirtualizedScrollPane<CodeArea> codeAreaScrollPane = new VirtualizedScrollPane<>(codeArea);
         codeArea.getStylesheets().add("data:text/css," + Main.MAIN_STYLE);
         codeArea.getStylesheets().add("data:text/css," + fileEditor.getHighlightingStyle());
+        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
         pane.getChildren().add(codeAreaScrollPane);
         AnchorPane.setTopAnchor(codeAreaScrollPane, 0.0);
         AnchorPane.setBottomAnchor(codeAreaScrollPane, 0.0);
