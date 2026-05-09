@@ -220,18 +220,12 @@ public class FileTab {
     private void subscribeRichChanges() {
         AtomicInteger count = new AtomicInteger(0);
 
-        new Thread(() -> {
-            String lastContent = codeArea.getText();
-            while (true) {
-                if (!lastContent.equals(lastContent = codeArea.getText())) {
-                    Platform.runLater(() -> {
-                        fileEditor.setContent(codeArea.getText());
-                        codeArea.setStyleSpans(0, fileEditor.computeHighlighting());
-                    });
-                    count.incrementAndGet();
-                }
-            }
-        }).start();
+        codeArea.multiPlainChanges().subscribe(change -> {
+            String newText = codeArea.getText();
+            fileEditor.setContent(newText);
+            codeArea.setStyleSpans(0, fileEditor.computeHighlighting());
+            count.incrementAndGet();
+        });
 
         codeArea.richChanges().filter(ch -> {
             String text = ch.getInserted().getText();

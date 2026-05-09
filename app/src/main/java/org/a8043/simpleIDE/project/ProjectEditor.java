@@ -125,8 +125,7 @@ public class ProjectEditor implements Closeable {
         });
 
         autoSaveThread = new Thread(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                ThreadUtil.sleep(Main.instance.getSettings().getAutoSaveInterval());
+            while (ThreadUtil.sleep(Main.instance.getSettings().getAutoSaveInterval())) {
                 saveFiles();
             }
         });
