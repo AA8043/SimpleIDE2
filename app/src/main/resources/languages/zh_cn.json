@@ -3,6 +3,9 @@
     "texts": {
         "confirm": "确定",
         "search": "搜索",
+        "search.next": "下一个",
+        "search.prev": "上一个",
+        "search.notFound": "未找到",
         "notNumber": "{} 不是数字",
         "run": "运行",
         "stop": "停止",

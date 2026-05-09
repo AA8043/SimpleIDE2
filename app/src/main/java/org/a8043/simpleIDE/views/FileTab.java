@@ -1,12 +1,14 @@
 package org.a8043.simpleIDE.views;
 
-import animatefx.animation.SlideInRight;
-import animatefx.animation.SlideOutRight;
+import animatefx.animation.*;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.core.io.watch.SimpleWatcher;
 import cn.hutool.core.io.watch.WatchMonitor;
 import cn.hutool.core.thread.ThreadUtil;
+import javafx.animation.Animation;
+import javafx.animation.Interpolator;
+import javafx.animation.ParallelTransition;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -17,6 +19,7 @@ import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.BorderPane;
@@ -51,21 +54,33 @@ import java.util.concurrent.atomic.AtomicReference;
 public class FileTab {
     private static final URL FXML_URL = ResourceUtil.getResource("FileTab.fxml", FileTab.class);
     private static final Map<String, FileEditorFactory> FILE_TYPE_MAP = new HashMap<>();
+    private static final List<ToolFactory> TOOL_LIST = new ArrayList<>();
 
     public interface FileEditorFactory {
         FileEditor create(ControllableFile file, ProjectEditor editor) throws Exception;
     }
 
+    public interface ToolFactory {
+        Node create(FileTab fileTab);
+    }
+
     static {
         registerFileType("*", DefaultFile::new);
         registerFileType("java", JavaFile::new);
+        registerTool(tab -> new Button("hi"));
     }
 
     public static void registerFileType(String fileType, FileEditorFactory factory) {
         FILE_TYPE_MAP.put(fileType, factory);
     }
 
+    public static void registerTool(ToolFactory factory) {
+        TOOL_LIST.add(factory);
+    }
+
+    @Getter
     private final ProjectEditor editor;
+    @Getter
     private final FileEditor fileEditor;
     private final boolean isFailedToOpen;
     @FXML
@@ -74,7 +89,10 @@ public class FileTab {
     private HBox toolBar;
     @FXML
     private AnchorPane pane;
+    @Getter
     private final CodeArea codeArea = new CodeArea();
+    private final HBox toolBarContent = new HBox();
+    private final HBox searchBox = new HBox();
     private final AtomicReference<Main.ModalController<CompleteBox>> nowCompleteBox = new AtomicReference<>();
 
     private FileTab(ProjectEditor editor, File file, String content, String fileType) {
@@ -108,6 +126,58 @@ public class FileTab {
 
     @FXML
     private void initialize() {
+        TextField searchField = new TextField();
+        searchBox.getChildren().addAll(new Label("search"), searchField, new Button("search.next") {{
+            setOnAction(e -> {
+                String searchText = searchField.getText();
+                if (searchText.isEmpty()) {
+                    return;
+                }
+                String text = codeArea.getText();
+                int index = text.indexOf(searchText, codeArea.getCaretPosition());
+                if (index >= 0) {
+                    codeArea.selectRange(index, index + searchText.length());
+                    codeArea.requestFollowCaret();
+                } else {
+                    int startIndex = text.indexOf(searchText);
+                    if (startIndex >= 0) {
+                        codeArea.selectRange(startIndex, startIndex + searchText.length());
+                        codeArea.requestFollowCaret();
+                    } else {
+                        showTemporaryTip(new Label("search.notFound"));
+                    }
+                }
+            });
+        }}, new Button("search.prev") {{
+            setOnAction(e -> {
+                String searchText = searchField.getText();
+                if (searchText.isEmpty()) {
+                    return;
+                }
+                String text = codeArea.getText();
+                int index = text.lastIndexOf(searchText, codeArea.getCaretPosition() - searchText.length());
+                if (index >= 0) {
+                    codeArea.selectRange(index, index + searchText.length());
+                    codeArea.requestFollowCaret();
+                } else {
+                    int lastIndex = text.lastIndexOf(searchText);
+                    if (lastIndex >= 0) {
+                        codeArea.selectRange(lastIndex, lastIndex + searchText.length());
+                        codeArea.requestFollowCaret();
+                    } else {
+                        showTemporaryTip(new Label("search.notFound"));
+                    }
+                }
+            });
+        }});
+        Main.instance.registerKeyBinding("exit", this::returnToolBar,
+            new KeyCodeCombination(KeyCode.ESCAPE), searchBox);
+        Main.instance.registerKeyBinding("search", () -> {
+                borrowToolBar(searchBox);
+                searchField.requestFocus();
+            },
+            new KeyCodeCombination(KeyCode.F, KeyCodeCombination.CONTROL_DOWN), codeArea);
+
         VirtualizedScrollPane<CodeArea> codeAreaScrollPane = new VirtualizedScrollPane<>(codeArea);
         codeArea.getStylesheets().add("data:text/css," + Main.MAIN_STYLE);
         codeArea.getStylesheets().add("data:text/css," + fileEditor.getHighlightingStyle());
@@ -208,12 +278,11 @@ public class FileTab {
             }
         }, WatchMonitor.ENTRY_MODIFY);
 
+        toolBarContent.getChildren().addAll(TOOL_LIST.stream().map(factory -> factory.create(this)).toList());
+        toolBar.getChildren().add(toolBarContent);
+
         if (isFailedToOpen) {
-            showTip(new Label(ResourceManager.getText("fileTab.failedToOpenFileTip")));
-            new Thread(() -> {
-                ThreadUtil.sleep(3000);
-                closeTip();
-            }).start();
+            showTemporaryTip(new Label("fileTab.failedToOpenFileTip"));
         }
     }
 
@@ -334,6 +403,14 @@ public class FileTab {
         return text.matches(".*[^a-zA-Z0-9\\u4e00-\\u9fa5.].*");
     }
 
+    public void showTemporaryTip(Node node) {
+        showTip(node);
+        new Thread(() -> {
+            ThreadUtil.sleep(3000);
+            closeTip();
+        }).start();
+    }
+
     public void showTip(Node node) {
         tipBox.getChildren().setAll(node);
         tipBox.setVisible(true);
@@ -344,6 +421,72 @@ public class FileTab {
         SlideOutRight slide = new SlideOutRight(tipBox);
         slide.setOnFinished(e -> tipBox.setVisible(false));
         slide.play();
+    }
+
+    private Node currentToolNode;
+    private Animation activeOutAnim;
+
+    public void borrowToolBar(Node newNode) {
+        if (newNode == null || currentToolNode == newNode || toolBar.getChildren().contains(newNode)) {
+            return;
+        }
+        if (activeOutAnim != null) {
+            activeOutAnim.stop();
+        }
+
+        newNode.setOpacity(0);
+        newNode.setManaged(true);
+        toolBarContent.setManaged(false);
+        if (!toolBar.getChildren().contains(newNode)) {
+            toolBar.getChildren().add(newNode);
+        }
+        FadeOut fadeOut = new FadeOut(toolBarContent);
+        activeOutAnim = fadeOut.getTimeline();
+        fadeOut.getTimeline().setOnFinished(e -> {
+            toolBar.getChildren().remove(toolBarContent);
+            toolBarContent.setManaged(true);
+            toolBarContent.setOpacity(1);
+            activeOutAnim = null;
+        });
+        ParallelTransition inAnim = new ParallelTransition(new FadeIn(newNode).getTimeline(),
+            new SlideInRight(newNode).getTimeline());
+        inAnim.setInterpolator(Interpolator.EASE_OUT);
+        fadeOut.play();
+        inAnim.play();
+        currentToolNode = newNode;
+    }
+
+    public void returnToolBar() {
+        if (currentToolNode == null) {
+            return;
+        }
+        if (activeOutAnim != null) {
+            activeOutAnim.stop();
+        }
+
+        Node oldNode = currentToolNode;
+        currentToolNode = null;
+        if (!toolBar.getChildren().contains(toolBarContent)) {
+            toolBar.getChildren().add(toolBarContent);
+        }
+        toolBarContent.setOpacity(0);
+        toolBarContent.setManaged(true);
+        oldNode.setManaged(false);
+        FadeOut fadeOut = new FadeOut(oldNode);
+        activeOutAnim = fadeOut.getTimeline();
+        fadeOut.getTimeline().setOnFinished(e -> {
+            toolBar.getChildren().remove(oldNode);
+            oldNode.setManaged(true);
+            oldNode.setTranslateX(0);
+            oldNode.setOpacity(1);
+            activeOutAnim = null;
+        });
+        ParallelTransition inAnim = new ParallelTransition(new FadeIn(toolBarContent).getTimeline(),
+            new SlideInLeft(toolBarContent).getTimeline());
+        inAnim.setInterpolator(Interpolator.EASE_OUT);
+        fadeOut.play();
+        inAnim.play();
+        codeArea.requestFocus();
     }
 
     @Getter
