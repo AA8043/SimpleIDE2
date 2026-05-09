@@ -20,7 +20,6 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
@@ -35,8 +34,8 @@ import org.a8043.simpleIDE.views.WelcomeView;
 
 import java.io.File;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -88,28 +87,6 @@ public class Main extends Application {
         });
     }
 
-    private static final List<KeyBinding> KEY_BINDING_LIST = new ArrayList<>();
-
-    public static void register(KeyBinding keyBinding) {
-        if (instance.getKeyBindingJson() != null) {
-            keyBinding.setKeyCombination(KeyCombination.valueOf(
-                instance.getKeyBindingJson().getStr(keyBinding.getName())));
-        }
-        KEY_BINDING_LIST.add(keyBinding);
-    }
-
-    @AllArgsConstructor
-    public static class KeyBinding {
-        @Getter
-        private final String name;
-        @Getter
-        private final String displayName;
-        private final Runnable runnable;
-        @Getter
-        @Setter
-        private KeyCombination keyCombination;
-    }
-
     public static void main(String[] args) {
         launch(args);
     }
@@ -117,6 +94,7 @@ public class Main extends Application {
     private JSONObject recordJson;
     private Settings settings;
     private JSONObject keyBindingJson;
+    private final Map<String, KeyCombination> keyBindingMap = new HashMap<>();
     private Stage stage;
     private final StackPane pane = new StackPane();
 
@@ -153,12 +131,6 @@ public class Main extends Application {
                 stage.setHeight(600);
                 stage.show();
 
-                scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> KEY_BINDING_LIST.forEach(binding -> {
-                    if (binding.getKeyCombination() != null && binding.getKeyCombination().match(event)) {
-                        binding.runnable.run();
-                    }
-                }));
-
                 Platform.runLater(loadView::close);
             });
         }).start();
@@ -181,7 +153,8 @@ public class Main extends Application {
         stepTipSetter.apply("正在读取键位绑定...");
         File keyBindingsFile = new File("./keyBindings.json");
         if (keyBindingsFile.exists()) {
-            keyBindingJson = new JSONObject(FileUtil.readUtf8String(keyBindingsFile));
+            (keyBindingJson = new JSONObject(FileUtil.readUtf8String(keyBindingsFile))).forEach((name, key) ->
+                keyBindingMap.put(name, KeyCombination.valueOf((String) key)));
         }
 
         stepTipSetter.apply("正在读取settings...");
@@ -252,8 +225,8 @@ public class Main extends Application {
         org.a8043.simpleIDE.util.FileUtil.close();
 
         log.info("正在保存config...");
-        KEY_BINDING_LIST.forEach(binding -> (keyBindingJson != null ? keyBindingJson : (keyBindingJson = new JSONObject()))
-            .set(binding.getName(), binding.getKeyCombination() != null ? binding.getKeyCombination().getName() : "null"));
+        keyBindingMap.forEach((name, key) ->
+            (keyBindingJson != null ? keyBindingJson : (keyBindingJson = new JSONObject())).set(name, key.getName()));
         FileUtil.writeUtf8String(keyBindingJson.toString(), new File("./keyBindings.json"));
         FileUtil.writeUtf8String(recordJson.toString(), new File("./record.json"));
         FileUtil.writeUtf8String(ConfigUtil.toJson(settings).toString(), new File("./settings.json"));
@@ -277,6 +250,15 @@ public class Main extends Application {
         FXMLLoader fxmlLoader = new FXMLLoader(url);
         beforeLoad.accept(fxmlLoader);
         display(fxmlLoader.<Parent>load());
+    }
+
+    public void registerKeyBinding(String name, Runnable runnable, KeyCombination defaultKey, Node node) {
+        KeyCombination key = keyBindingMap.computeIfAbsent(name, k -> defaultKey);
+        node.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
+            if (key.match(e)) {
+                runnable.run();
+            }
+        });
     }
 
     public <N extends Node> ModalController<N> showModal(N node, double width, double height) {

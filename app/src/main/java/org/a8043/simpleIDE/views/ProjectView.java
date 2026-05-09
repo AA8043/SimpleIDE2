@@ -94,18 +94,16 @@ public class ProjectView {
     private void initialize() {
         File projectDir = editor.getProject().getProjectDir();
 
-        Main.register(new Main.KeyBinding("runnable.run", "run",
-            () -> runRunnable(null), new KeyCodeCombination(KeyCode.F5)));
-        Main.register(new Main.KeyBinding("git.commit", "git.commit",
-            () -> {
-                if (new File(projectDir, ".git").exists()) {
-                    GitCommitModal.show(editor);
-                } else {
-                    Main.instance.showConfirmModal("git.noGit", () ->
-                        GitUtil.init(projectDir));
-                }
-            }, new KeyCodeCombination(KeyCode.C,
-            KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN, KeyCombination.ALT_DOWN)));
+        Main.instance.registerKeyBinding("runnable.run",
+            () -> runRunnable(null), new KeyCodeCombination(KeyCode.F5), pane);
+        Main.instance.registerKeyBinding("git.commit", () -> {
+            if (new File(projectDir, ".git").exists()) {
+                GitCommitModal.show(editor);
+            } else {
+                Main.instance.showConfirmModal("git.noGit", () -> GitUtil.init(projectDir));
+            }
+        }, new KeyCodeCombination(KeyCode.C,
+            KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN, KeyCombination.ALT_DOWN), pane);
 
         editorTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             tabHistory.remove(newTab);
