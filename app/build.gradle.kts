@@ -17,8 +17,21 @@ val nativeProject = project(":native")
 plugins {
     java
     application
+    `maven-publish`
     id("org.openjfx.javafxplugin") version "0.1.0"
     id("io.franzbecker.gradle-lombok") version "3.0.0"
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            from(components["java"])
+        }
+    }
+
+    repositories {
+        mavenLocal()
+    }
 }
 
 javafx {
@@ -135,9 +148,8 @@ tasks.register<Jar>("fatJar") {
 tasks.named<JavaExec>("run") {
     workingDir = rootDir.resolve("test")
     jvmArgs = listOf(
-        "-Djava.library.path=${
-            nativeProject.layout.buildDirectory.file("lib/main/debug/windows").get().asFile
-        }"
+        "-Djava.library.path=${nativeProject.layout.buildDirectory.file("lib/main/debug/windows").get().asFile}",
+        "--add-opens", "java.base/java.net=ALL-UNNAMED",
     )
 }
 

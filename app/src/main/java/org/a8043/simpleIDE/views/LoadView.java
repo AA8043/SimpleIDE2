@@ -9,6 +9,7 @@ import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import lombok.SneakyThrows;
+import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.resource.ResourceManager;
 
 public class LoadView {
@@ -48,7 +49,9 @@ public class LoadView {
     private void initialize() {
         iconView.setImage(ResourceManager.getImage("icon"));
         stepTipLabel.setGraphic(ResourceManager.createImageView("loading", 32, 32));
-        versionLabel.setText("SimpleIDE 2.0; JavaFX 21.0.4");
+        versionLabel.setText("SimpleIDE {ide}; JavaFX {javafx}"
+            .replace("{ide}", Main.instance.getVersionJson().getStr("ide"))
+            .replace("{javafx}", Main.instance.getVersionJson().getStr("javafx")));
     }
 
     public void setStepTip(String text) {

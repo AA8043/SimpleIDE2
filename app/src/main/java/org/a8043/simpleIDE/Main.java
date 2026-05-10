@@ -24,6 +24,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.a8043.simpleIDE.plugin.PluginManager;
 import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
@@ -90,6 +91,7 @@ public class Main extends Application {
         launch(args);
     }
 
+    private JSONObject versionJson;
     private JSONObject recordJson;
     private Settings settings;
     private JSONObject keyBindingJson;
@@ -104,6 +106,7 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) throws Exception {
         this.stage = stage;
+        versionJson = new JSONObject(ResourceUtil.readUtf8Str("version.json"));
 
         ResourceManager.loadFirstImage();
         LoadView.Controller loadView = LoadView.showWindow();
@@ -206,6 +209,10 @@ public class Main extends Application {
 
         stepTipSetter.apply("正在加载本地库...");
         System.loadLibrary("native");
+
+        stepTipSetter.apply("正在加载插件...");
+        PluginManager.loadAll();
+        PluginManager.enableAll();
     }
 
     @Override
@@ -222,6 +229,9 @@ public class Main extends Application {
 
         log.info("正在关闭文件...");
         org.a8043.simpleIDE.util.FileUtil.close();
+
+        log.info("正在关闭插件...");
+        PluginManager.closeAll();
 
         log.info("正在保存config...");
         keyBindingMap.forEach((name, key) ->
