@@ -1,5 +1,7 @@
 package org.a8043.simpleIDE.project.buildTool;
 
+import cn.hutool.core.convert.AbstractConverter;
+import cn.hutool.core.convert.ConverterRegistry;
 import lombok.AllArgsConstructor;
 import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.Project;
@@ -21,6 +23,16 @@ public abstract class BuildToolType {
         register(MAVEN);
         register(GRADLE);
         register(UNKNOWN);
+
+        ConverterRegistry.getInstance().putCustom(BuildToolType.class, new AbstractConverter<BuildToolType>() {
+            @Override
+            protected BuildToolType convertInternal(Object value) {
+                if (value instanceof String str) {
+                    return getByName(str);
+                }
+                return null;
+            }
+        });
     }
 
     public static void register(BuildToolType type) {

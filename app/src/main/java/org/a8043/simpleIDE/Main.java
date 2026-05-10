@@ -78,8 +78,8 @@ public class Main extends Application {
         ConverterRegistry.getInstance().putCustom(File.class, new AbstractConverter<File>() {
             @Override
             protected File convertInternal(Object value) {
-                if (value instanceof String) {
-                    return new File((String) value);
+                if (value instanceof String str) {
+                    return new File(str);
                 }
                 return null;
             }
