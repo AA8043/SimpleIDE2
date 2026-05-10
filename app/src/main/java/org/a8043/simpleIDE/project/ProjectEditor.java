@@ -21,7 +21,6 @@ import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.RunnableType;
 import org.a8043.simpleIDE.util.GitUtil;
-import org.a8043.simpleIDE.util.config.ConfigUtil;
 
 import java.io.Closeable;
 import java.io.File;
@@ -79,7 +78,7 @@ public class ProjectEditor implements Closeable {
                 config = ProjectConfig.fromDefault(this);
             }
         } else {
-            config = ConfigUtil.toObject(new JSONObject(FileUtil.readUtf8String(configFile)), ProjectConfig.class);
+            config = new JSONObject(FileUtil.readUtf8String(configFile)).toBean(ProjectConfig.class);
         }
 
         recordFile = new File(configDir, "record.json");
@@ -178,7 +177,7 @@ public class ProjectEditor implements Closeable {
         runnableList.forEach(runnable -> config.getRunnableJsonList().add(runnable.getJson()));
         FileUtil.writeUtf8String(new JSONObject(projectModel).toString(), modelFile);
         FileUtil.writeUtf8String(index.toJSONString(), indexCacheFile);
-        FileUtil.writeUtf8String(ConfigUtil.toJson(config).toString(), configFile);
+        FileUtil.writeUtf8String(new JSONObject(config).toString(), configFile);
         FileUtil.writeUtf8String(record.toString(), recordFile);
     }
 }

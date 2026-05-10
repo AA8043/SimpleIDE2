@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.project.types;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.json.JSONObject;
 import javafx.scene.Node;
 import javafx.scene.layout.Pane;
 import org.a8043.simpleIDE.project.Jdk;
@@ -8,7 +9,6 @@ import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectConfig;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.resource.ResourceManager;
-import org.a8043.simpleIDE.util.config.ConfigUtil;
 import org.a8043.simpleIDE.views.NewProjectModal;
 
 import java.io.File;
@@ -34,7 +34,7 @@ public class JavaProject implements NewProjectModal.ProjectType {
             throw new RuntimeException();
         }
         File configDir = new File(projectDir, ".simpleIDE");
-        FileUtil.writeUtf8String(ConfigUtil.toJson(new ProjectConfig(jdk.getPath(),
+        FileUtil.writeUtf8String(new JSONObject(new ProjectConfig(jdk.getPath(),
                 buildToolType, null, new ArrayList<>(), "")).toString(),
             new File(configDir, "editor.json"));
         buildToolType.generateBuildScript(project, jdk, groupId, artifactId);

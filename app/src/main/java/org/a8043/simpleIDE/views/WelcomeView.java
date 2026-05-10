@@ -21,6 +21,7 @@ import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
+import org.a8043.simpleIDE.util.BeanMap;
 import org.a8043.simpleIDE.util.SearchUtil;
 
 import java.io.File;
@@ -86,7 +87,7 @@ public class WelcomeView {
     @FXML
     private void openSettingsModal() {
         FXMLLoader loader = new FXMLLoader(SettingsModal.FXML_URL);
-        loader.setControllerFactory(clazz -> new SettingsModal(Main.instance.getSettings()));
+        loader.setControllerFactory(clazz -> new SettingsModal(new BeanMap(Main.instance.getSettings())));
         Main.instance.showModal("settings", loader.load(), 980, 570);
     }
 

@@ -28,7 +28,6 @@ import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.GitUtil;
-import org.a8043.simpleIDE.util.config.ConfigUtil;
 import org.a8043.simpleIDE.views.LoadView;
 import org.a8043.simpleIDE.views.WelcomeView;
 
@@ -159,13 +158,13 @@ public class Main extends Application {
 
         stepTipSetter.apply("正在读取settings...");
         File settingsJsonFile = new File("./settings.json");
-        Runnable generateSettings = () -> FileUtil.writeUtf8String(ConfigUtil.toJson(
-            settings = Settings.fromDefault()).toString(), settingsJsonFile);
+        Runnable generateSettings = () -> FileUtil.writeUtf8String(new JSONObject(settings = Settings.fromDefault())
+            .toString(), settingsJsonFile);
         if (!settingsJsonFile.exists()) {
             generateSettings.run();
         } else {
             try {
-                settings = ConfigUtil.toObject(new JSONObject(FileUtil.readUtf8String(settingsJsonFile)), Settings.class);
+                settings = new JSONObject(FileUtil.readUtf8String(settingsJsonFile)).toBean(Settings.class);
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
                 Object lock = new Object();
@@ -229,7 +228,7 @@ public class Main extends Application {
             (keyBindingJson != null ? keyBindingJson : (keyBindingJson = new JSONObject())).set(name, key.getName()));
         FileUtil.writeUtf8String(keyBindingJson.toString(), new File("./keyBindings.json"));
         FileUtil.writeUtf8String(recordJson.toString(), new File("./record.json"));
-        FileUtil.writeUtf8String(ConfigUtil.toJson(settings).toString(), new File("./settings.json"));
+        FileUtil.writeUtf8String(new JSONObject(settings).toString(), new File("./settings.json"));
     }
 
     public void display(Node node) {

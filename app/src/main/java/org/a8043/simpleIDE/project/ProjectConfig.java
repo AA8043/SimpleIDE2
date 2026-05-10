@@ -1,5 +1,6 @@
 package org.a8043.simpleIDE.project;
 
+import cn.hutool.core.annotation.Alias;
 import cn.hutool.json.JSONObject;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -8,8 +9,6 @@ import lombok.Setter;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.project.buildTool.Gradle;
-import org.a8043.simpleIDE.util.config.ConfigClass;
-import org.a8043.simpleIDE.util.config.Item;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,17 +18,12 @@ import java.util.List;
 @NoArgsConstructor
 @Getter
 @Setter
-@ConfigClass
 public class ProjectConfig {
-    @Item
     private File jdkPath;
-    @Item
     private BuildToolType buildToolType;
-    @Item
     private File buildToolPath;
-    @Item
     private List<JSONObject> runnableJsonList;
-    @Item("index.#")
+    @Alias("index.onlyIndexStartsWith")
     private String onlyIndexStartsWith;
 
     public static ProjectConfig fromMaven(ProjectEditor editor) {

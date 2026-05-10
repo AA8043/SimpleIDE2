@@ -1,8 +1,7 @@
 package org.a8043.simpleIDE;
 
+import cn.hutool.core.annotation.Alias;
 import lombok.*;
-import org.a8043.simpleIDE.util.config.ConfigClass;
-import org.a8043.simpleIDE.util.config.Item;
 
 import java.io.File;
 import java.util.Locale;
@@ -11,29 +10,16 @@ import java.util.Locale;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Getter
 @Setter
-@ConfigClass(nodesName = """
-    buildTool=buildTool+settings.buildTool.description
-    buildTool.maven=buildTool.maven+settings.buildTool.maven.description
-    buildTool.gradle=buildTool.gradle+settings.buildTool.gradle.description
-    appearance=settings.appearance+settings.appearance.description
-    index=settings.index+settings.index.description
-    editor=settings.editor+settings.editor.description
-    """)
 public class Settings {
-    @Item(value = "buildTool.maven.defaultPath", title = "settings.buildTool.defaultPath",
-        description = "settings.buildTool.defaultPath.description")
+    @Alias("buildTool.maven.defaultPath")
     private File defaultMavenPath;
-    @Item(value = "buildTool.gradle.defaultPath", title = "settings.buildTool.defaultPath",
-        description = "settings.buildTool.defaultPath.description")
+    @Alias("buildTool.gradle.defaultPath")
     private File defaultGradlePath;
-    @Item(value = "appearance.#", title = "settings.ide.languageName",
-        description = "settings.ide.languageName.description")
+    @Alias("appearance.languageName")
     private String languageName;
-    @Item(value = "index.#", title = "settings.index.threadCount",
-        description = "settings.index.threadCount.description")
+    @Alias("index.threadCount")
     private int indexThreadCount;
-    @Item(value = "editor.#", title = "settings.editor.autoSaveInterval",
-        description = "settings.editor.autoSaveInterval.description")
+    @Alias("editor.autoSaveInterval")
     private int autoSaveInterval;
 
     public static Settings fromDefault() {
