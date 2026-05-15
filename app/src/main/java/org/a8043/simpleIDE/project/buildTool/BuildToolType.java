@@ -2,7 +2,7 @@ package org.a8043.simpleIDE.project.buildTool;
 
 import cn.hutool.core.convert.AbstractConverter;
 import cn.hutool.core.convert.ConverterRegistry;
-import lombok.AllArgsConstructor;
+import cn.hutool.json.JSONObject;
 import org.a8043.simpleIDE.project.Jdk;
 import org.a8043.simpleIDE.project.Project;
 import org.a8043.simpleIDE.project.ProjectEditor;
@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-@AllArgsConstructor
 public abstract class BuildToolType {
     public static final Maven.MavenType MAVEN = new Maven.MavenType();
     public static final Gradle.GradleType GRADLE = new Gradle.GradleType();
@@ -27,8 +26,8 @@ public abstract class BuildToolType {
         ConverterRegistry.getInstance().putCustom(BuildToolType.class, new AbstractConverter<BuildToolType>() {
             @Override
             protected BuildToolType convertInternal(Object value) {
-                if (value instanceof String str) {
-                    return getByName(str);
+                if (value instanceof JSONObject json) {
+                    return getByName(json.getStr("name"));
                 }
                 return null;
             }
@@ -40,10 +39,16 @@ public abstract class BuildToolType {
     }
 
     public static BuildToolType getByName(String name) {
-        return TYPE_LIST.stream().filter(type -> Objects.equals(type.name(), name)).findFirst().orElse(null);
+        return TYPE_LIST.stream().filter(type -> Objects.equals(type.getName(), name)).findFirst().orElse(null);
     }
 
-    public abstract String name();
+    private String name;
+
+    public final String getName() {
+        return name != null ? name : (name = name());
+    }
+
+    protected abstract String name();
 
     public abstract Class<? extends ProjectModel> getModelType();
 
@@ -59,7 +64,7 @@ public abstract class BuildToolType {
 
     public static class UnknownType extends BuildToolType {
         @Override
-        public String name() {
+        protected String name() {
             return "UNKNOWN";
         }
 

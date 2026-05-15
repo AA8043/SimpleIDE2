@@ -85,7 +85,7 @@ public class NewProjectModal {
         });
 
         Callback<ListView<BuildToolType>, ListCell<BuildToolType>> buildToolCell =
-            Util.createListCell(type -> new Label(type.name()));
+            Util.createListCell(type -> new Label(type.getName()));
         buildToolBox.setCellFactory(buildToolCell);
         buildToolBox.setButtonCell(buildToolCell.call(null));
         buildToolBox.getItems().addAll(BuildToolType.TYPE_LIST);

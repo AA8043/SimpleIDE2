@@ -205,7 +205,7 @@ public class Maven extends BuildTool {
         private static final String POM = ResourceUtil.readUtf8Str("fileTemplates/mavenPom.txt");
 
         @Override
-        public String name() {
+        protected String name() {
             return "MAVEN";
         }
 

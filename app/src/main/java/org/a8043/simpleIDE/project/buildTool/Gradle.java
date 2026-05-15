@@ -87,7 +87,7 @@ public class Gradle extends BuildTool {
         private static final String BUILD = ResourceUtil.readUtf8Str("fileTemplates/gradleBuild.txt");
 
         @Override
-        public String name() {
+        protected String name() {
             return "GRADLE";
         }
 
