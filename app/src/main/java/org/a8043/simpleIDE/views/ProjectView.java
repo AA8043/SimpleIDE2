@@ -165,7 +165,7 @@ public class ProjectView {
             @Override
             public Node getPopupContent() {
                 refreshBranchBox.run();
-                return new VBox(new HBox(new Button(ResourceManager.getText("git.createBranch")) {{
+                VBox box = new VBox(new HBox(new Button(ResourceManager.getText("git.createBranch")) {{
                     setOnAction(e -> Main.instance.showInputModal("git.createBranch",
                         name -> editor.runTask(new Task<Void>() {
                             @Override
@@ -230,6 +230,8 @@ public class ProjectView {
                 }}) {{
                     getStyleClass().add("combo-box-popup");
                 }};
+                ResourceManager.setup(box);
+                return box;
             }
         });
         refreshBranchBox.run();

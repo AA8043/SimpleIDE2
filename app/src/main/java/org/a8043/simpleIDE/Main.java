@@ -97,6 +97,7 @@ public class Main extends Application {
     private JSONObject keyBindingJson;
     private final Map<String, KeyCombination> keyBindingMap = new HashMap<>();
     private Stage stage;
+    private Scene scene;
     private final StackPane pane = new StackPane();
 
     public Main() {
@@ -122,7 +123,7 @@ public class Main extends Application {
             stepTipSetter.apply("...");
             Platform.runLater(() -> {
                 setUserAgentStylesheet(ResourceUtil.getResource("styles/Main.css").toString());
-                Scene scene = new Scene(pane, stage.getWidth(), stage.getHeight());
+                scene = new Scene(pane, stage.getWidth(), stage.getHeight());
                 stage.setScene(scene);
                 display(WelcomeView.FXML_URL);
                 ResourceManager.setup(pane);

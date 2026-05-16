@@ -3,10 +3,14 @@ package org.a8043.simpleIDE.resource;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.io.resource.ResourceUtil;
+import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.core.util.URLUtil;
 import cn.hutool.core.util.ZipUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
@@ -14,6 +18,10 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
+import javafx.util.Duration;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -143,6 +151,26 @@ public class ResourceManager {
             setupAndListen.apply(pane.getItems());
         } else if (node instanceof Pane pane) {
             setupAndListen.apply(pane.getChildren());
+        }
+        if (node instanceof Button button) {
+            ObservableList<Node> children = ReflectUtil.invoke(button, "getChildren");
+            button.setOnMousePressed(event -> {
+                Circle ripple = new Circle(event.getX(), event.getY(), 0, Color.WHITE);
+                ripple.setOpacity(0.5);
+                Rectangle clip = new Rectangle(button.getWidth(), button.getHeight());
+                clip.setArcWidth(10);
+                clip.setArcHeight(10);
+                button.setClip(clip);
+                children.add(ripple);
+                Timeline timeline = new Timeline(new KeyFrame(Duration.ZERO,
+                    new KeyValue(ripple.radiusProperty(), 0),
+                    new KeyValue(ripple.opacityProperty(), 0.6)),
+                    new KeyFrame(Duration.millis(300), new KeyValue(ripple.radiusProperty(), Math.sqrt(
+                        Math.pow(button.getWidth(), 2) + Math.pow(button.getHeight(), 2))),
+                        new KeyValue(ripple.opacityProperty(), 0)));
+                timeline.setOnFinished(e -> children.remove(ripple));
+                timeline.play();
+            });
         }
     }
 

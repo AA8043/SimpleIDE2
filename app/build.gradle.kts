@@ -150,6 +150,7 @@ tasks.named<JavaExec>("run") {
     jvmArgs = listOf(
         "-Djava.library.path=${nativeProject.layout.buildDirectory.file("lib/main/debug/windows").get().asFile}",
         "--add-opens", "java.base/java.net=ALL-UNNAMED",
+        "--add-opens", "javafx.graphics/javafx.scene=ALL-UNNAMED"
     )
 }
 
