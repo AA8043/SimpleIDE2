@@ -1,7 +1,12 @@
 package org.a8043.simpleIDE.resource;
 
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.io.resource.ResourceUtil;
+import cn.hutool.core.util.URLUtil;
+import cn.hutool.core.util.ZipUtil;
 import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
@@ -11,14 +16,20 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
+import org.a8043.simpleIDE.plugin.Plugin;
+import org.a8043.simpleIDE.plugin.PluginManager;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.function.Function;
+import java.util.zip.ZipFile;
 
+@Slf4j
 public class ResourceManager {
     @Getter
     @Setter
@@ -47,6 +58,51 @@ public class ResourceManager {
             }
             String simpleName = ((String) name).split("\\.")[0];
             IMAGE_MAP.put(simpleName, new Image(ResourceUtil.getStream("images/" + name)));
+        });
+    }
+
+    public static void loadResourcePackages() {
+        File packagesDir = new File("./resourcePackages");
+        if (!packagesDir.exists() && !packagesDir.mkdirs()) {
+            throw new RuntimeException();
+        }
+
+        List<File> packageList = new ArrayList<>();
+        packageList.addAll(PluginManager.PLUGIN_LIST.stream().map(Plugin::getClassLoader)
+            .map(classLoader -> classLoader.getResource("resourcePackage.zip"))
+            .filter(Objects::nonNull)
+            .map(url -> FileUtil.writeFromStream(URLUtil.getStream(url), FileUtil.createTempFile())).toList());
+        packageList.addAll(List.of(Objects.requireNonNull(packagesDir.listFiles(file ->
+            file.isFile() && file.getName().endsWith(".zip")))));
+
+        packageList.forEach(file -> {
+            log.info("加载资源包: {}", file.getName());
+            try (ZipFile zip = ZipUtil.toZipFile(file, StandardCharsets.UTF_8)) {
+                ZipUtil.listFileNames(zip, "images").forEach(fileName -> {
+                    try (InputStream stream = ZipUtil.getStream(zip, zip.getEntry("images/" + fileName))) {
+                        IMAGE_MAP.put(fileName.split("\\.")[0], new Image(stream));
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+
+                ZipUtil.listFileNames(zip, "languages").forEach(fileName -> {
+                    String languageName = fileName.split("\\.")[0];
+                    String content;
+                    try (InputStream stream = ZipUtil.getStream(zip, zip.getEntry("languages/" + fileName))) {
+                        content = IoUtil.readUtf8(stream);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    LANGUAGE_LIST.stream().filter(lang -> lang.getName().equals(languageName))
+                        .findFirst().ifPresentOrElse(language -> {
+                            JSONObject json = new JSONObject(content).getJSONObject("texts");
+                            json.forEach((k, v) -> language.getTextMap().put(k, (String) v));
+                        }, () -> LANGUAGE_LIST.add(new Language(languageName, content)));
+                });
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         });
     }
 

@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.resource;
 
 import cn.hutool.json.JSONObject;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ public class Language {
     private final String jsonContent;
     @Getter
     private String descriptionName;
+    @Getter(AccessLevel.PACKAGE)
     private final Map<String, String> textMap = new HashMap<>();
 
     public Language(String name, String jsonContent) {

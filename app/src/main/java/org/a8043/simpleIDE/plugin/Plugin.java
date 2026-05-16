@@ -3,6 +3,7 @@ package org.a8043.simpleIDE.plugin;
 import cn.hutool.core.comparator.VersionComparator;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.json.JSONObject;
+import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
@@ -12,6 +13,7 @@ import java.net.URLClassLoader;
 import java.util.Objects;
 
 @Slf4j
+@Getter
 public class Plugin {
     private final URLClassLoader classLoader;
     private final PluginInfo info;
@@ -27,6 +29,7 @@ public class Plugin {
     }
 
     public void enable() {
+        log.info("启用插件: {}", info.getName());
         if (!isIDEVersionInRange(info.getMinIDEVersion(), info.getMaxIDEVersion())) {
             log.warn("插件 {} 要求的IDE版本 {}~{} 与当前IDE版本 {} 不兼容",
                 info.getName(), info.getMinIDEVersion(), info.getMaxIDEVersion(),

@@ -213,6 +213,9 @@ public class Main extends Application {
         stepTipSetter.apply("正在加载插件...");
         PluginManager.loadAll();
         PluginManager.enableAll();
+
+        stepTipSetter.apply("正在加载资源包...");
+        ResourceManager.loadResourcePackages();
     }
 
     @Override
