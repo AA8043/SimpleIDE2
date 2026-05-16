@@ -25,7 +25,6 @@ import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.MethodSignature;
-import org.a8043.simpleIDE.project.index.Module;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.FileUtil;
 import org.a8043.simpleIDE.util.FixedList;
@@ -469,13 +468,7 @@ public class JavaFile extends FileEditor {
 
     private IndexPoint resolveType(String typeName, CompilationUnit compilationUnit) {
         String normalizedTypeName = typeName.replace("[]", "");
-        String[] classPath = JavaUtil.getClassAbsolutePath(getEditor().getIndex(), indexPoint,
-            normalizedTypeName, compilationUnit);
-        if (classPath == null) {
-            return null;
-        }
-        Module module = JavaUtil.resolveModuleByPath(getEditor().getIndex(), indexPoint, classPath);
-        return module != null ? module.getPoint(classPath) : null;
+        return JavaUtil.resolvePointByName(getEditor().getIndex(), indexPoint, normalizedTypeName, compilationUnit);
     }
 
     private void addMemberCompletionItems(List<CompleteItem> itemList, IndexPoint scopeType,
@@ -807,17 +800,10 @@ public class JavaFile extends FileEditor {
                             methodSignature.set(methodSignature1);
                             yield methodSignature1.getReturnType();
                         }
-                        case FieldAccessExpr fieldAccessExpr -> {
-                            yield lastPoint.getField(fieldAccessExpr.getNameAsString()).getType();
-                        }
-                        case NameExpr nameExpr -> {
-                            String[] classPath = JavaUtil.getClassAbsolutePath(getEditor().getIndex(),
-                                lastPoint, nameExpr.getNameAsString(), compilationUnit);
-                            Module module = JavaUtil.resolveModuleByPath(getEditor().getIndex(), lastPoint, classPath);
-                            yield Objects.requireNonNull(module).getPoints().stream()
-                                .filter(point -> ArrayUtil.equals(point.getPath(), classPath))
-                                .findFirst().orElse(null);
-                        }
+                        case FieldAccessExpr fieldAccessExpr ->
+                            lastPoint.getField(fieldAccessExpr.getNameAsString()).getType();
+                        case NameExpr nameExpr -> JavaUtil.resolvePointByName(getEditor().getIndex(),
+                            lastPoint, nameExpr.getNameAsString(), compilationUnit);
                         default -> throw new RuntimeException();
                     });
                 }

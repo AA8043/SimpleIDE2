@@ -105,11 +105,7 @@ public class ProjectEditor implements Closeable {
         }
 
         indexCacheFile = new File(configDir, "indexCache.json");
-        if (indexCacheFile.exists()) {
-            index = Index.convert(this, new JSONObject(FileUtil.readUtf8String(indexCacheFile)));
-        } else {
-            index = new Index(this);
-        }
+        index = new Index(this);
 
         if (new File(project.getProjectDir(), ".git").exists()) {
             GitUtil.open(project.getProjectDir());

@@ -4,13 +4,14 @@ import cn.hutool.core.util.ArrayUtil;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.TypeDeclaration;
+import org.a8043.simpleIDE.project.ProjectModule;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.Module;
 import org.a8043.simpleIDE.project.index.Package;
 
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class JavaUtil {
@@ -34,22 +35,26 @@ public class JavaUtil {
             .orElseGet(() -> module.hasPoint(path) ? module : null);
     }
 
-    public static String[] getClassAbsolutePath(Index index, IndexPoint source, String name, CompilationUnit unit) {
-        if (List.of("byte", "short", "int", "long", "float", "double", "char", "boolean", "void").contains(name)) {
-            return new String[]{name};
-        }
-
-        if (unit != null && source != null) {
-            if (Objects.equals(source.getName(), name)) {
-                return source.getPath();
+    public static IndexPoint resolvePointByName(Index index, IndexPoint source, String name, CompilationUnit unit) {
+        if (index != null) {
+            IndexPoint basicType = index.getBasicTypeMap().get(name);
+            if (basicType != null) {
+                return basicType;
             }
         }
 
         if (unit != null && source != null) {
-            String[] path = unit.getTypes().stream().filter(type -> type.getNameAsString().equals(name)).findFirst()
-                .map(type -> ArrayUtil.addAll(source.getPath(), new String[]{type.getNameAsString()})).orElse(null);
-            if (path != null) {
-                return path;
+            if (Objects.equals(source.getName(), name)) {
+                return source;
+            }
+        }
+
+        if (index != null && unit != null && source != null) {
+            TypeDeclaration<?> declaration = unit.getTypes().stream().filter(type -> type.getNameAsString().equals(name))
+                .findFirst().orElse(null);
+            if (declaration != null) {
+                // TODO: 内部类
+                return null;
             }
         }
 
@@ -58,12 +63,12 @@ public class JavaUtil {
             if (pkg != null) {
                 IndexPoint inPkgPoint = pkg.getPoint(name);
                 if (inPkgPoint != null) {
-                    return inPkgPoint.getPath();
+                    return inPkgPoint;
                 }
             }
         }
 
-        if (unit != null) {
+        if (index != null && unit != null) {
             AtomicReference<String[]> importResult = new AtomicReference<>();
             NodeList<ImportDeclaration> importList = unit.getImports();
             importList.forEach(imp -> {
@@ -73,7 +78,11 @@ public class JavaUtil {
                 }
             });
             if (importResult.get() != null) {
-                return importResult.get();
+                IndexPoint point = resolvePointByPath(index,
+                    Objects.requireNonNull(source).getPkg().getModule(), importResult.get());
+                if (point != null) {
+                    return point;
+                }
             }
         }
 
@@ -82,7 +91,7 @@ public class JavaUtil {
             if (pkg != null) {
                 IndexPoint langPoint = pkg.getPoint(name);
                 if (langPoint != null) {
-                    return langPoint.getPath();
+                    return langPoint;
                 }
             }
         }
@@ -92,14 +101,64 @@ public class JavaUtil {
             unit.getImports().forEach(declaration -> {
                 if (declaration.isAsterisk()) {
                     String[] path = ArrayUtil.addAll(declaration.getNameAsString().split("\\."), new String[]{name});
-                    IndexPoint point = resolveModuleByPath(index, source, path).getPoint(path);
+                    IndexPoint point = resolvePointByPath(index, source.getPkg().getModule(), path);
                     if (point != null) {
                         indexPoint.set(point);
                     }
                 }
             });
             if (indexPoint.get() != null) {
-                return indexPoint.get().getPath();
+                return indexPoint.get();
+            }
+        }
+
+        return null;
+    }
+
+    public static IndexPoint resolvePointByPath(Index index, Module source, String[] path) {
+        IndexPoint pointInSelf = source.getPoint(path);
+        if (pointInSelf != null) {
+            return pointInSelf;
+        }
+
+        Set<Module> visited = new HashSet<>();
+        Queue<Module> queue = new LinkedList<>();
+
+        source.getRequireList().stream().filter(dep -> !visited.contains(dep)).forEach(dep -> {
+            visited.add(dep);
+            queue.offer(dep);
+        });
+
+        while (!queue.isEmpty()) {
+            Module current = queue.poll();
+            IndexPoint point = current.getPoint(path);
+            if (point != null) {
+                return point;
+            }
+            for (Module transitiveDep : current.getRequireList()) {
+                if (!visited.contains(transitiveDep)) {
+                    visited.add(transitiveDep);
+                    queue.offer(transitiveDep);
+                }
+            }
+        }
+
+        Module unnamedModule = index.getModuleList().getFirst();
+        if (unnamedModule != null && !visited.contains(unnamedModule)) {
+            IndexPoint pointInUnnamed = unnamedModule.getPoint(path);
+            if (pointInUnnamed != null) {
+                return pointInUnnamed;
+            }
+        }
+
+        for (Module module : index.getModuleList()) {
+            if (module.getProjectModule() != null &&
+                module.getProjectModule().getLocation() == ProjectModule.Location.JDK &&
+                !visited.contains(module)) {
+                IndexPoint point = module.getPoint(path);
+                if (point != null) {
+                    return point;
+                }
             }
         }
 
