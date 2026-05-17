@@ -392,10 +392,17 @@ public class FileTab {
     }
 
     private void complete(CompleteItem item) {
-        int start = item.getStart();
-        int end = codeArea.getCaretPosition();
-        codeArea.replaceText(start, end, item.getText());
-        codeArea.moveTo(start + item.getText().length());
+        int caretPosition = codeArea.getCaretPosition();
+        if (fileEditor instanceof JavaFile javaFile) {
+            JavaFile.CompletionApplyResult result = javaFile.applyCompletion(item, caretPosition);
+            codeArea.replaceText(result.getContent());
+            codeArea.moveTo(result.getCaretPosition());
+        } else {
+            String newContent = codeArea.getText().substring(0, item.getStart()) + item.getText() +
+                                codeArea.getText().substring(caretPosition);
+            codeArea.replaceText(newContent);
+            codeArea.moveTo(item.getStart() + item.getText().length());
+        }
         nowCompleteBox.get().close();
     }
 

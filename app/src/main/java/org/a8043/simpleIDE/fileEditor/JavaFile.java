@@ -9,6 +9,7 @@ import com.github.javaparser.*;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Modifier;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -45,7 +46,10 @@ import java.util.stream.Stream;
 public class JavaFile extends FileEditor {
     public static final String STYLE = ResourceUtil.readUtf8Str("styles/JavaHighlighter.css");
     private final List<ParseResult<CompilationUnit>> parseResultHistoryList = new FixedList<>(10);
+    private final List<String> contentHistoryList = new FixedList<>(10);
     private final List<CodeError> semanticErrorList = new ArrayList<>();
+    private List<TextEditSegment> pendingHighlightEdits;
+    private String pendingHighlightContent;
     private IndexPoint indexPoint;
 
     public JavaFile(ControllableFile file, ProjectEditor editor) {
@@ -75,6 +79,19 @@ public class JavaFile extends FileEditor {
             }
         });
         return result.get();
+    }
+
+    private HighlightSnapshot getLatestSuccessfulHighlightSnapshot() {
+        List<ParseResult<CompilationUnit>> parseHistory = CollUtil.reverseNew(parseResultHistoryList);
+        List<String> contentHistory = CollUtil.reverseNew(contentHistoryList);
+        for (int i = 0; i < Math.min(parseHistory.size(), contentHistory.size()); i++) {
+            ParseResult<CompilationUnit> parseResult = parseHistory.get(i);
+            CompilationUnit compilationUnit = parseResult.getResult().orElse(null);
+            if (parseResult.isSuccessful() && compilationUnit != null) {
+                return new HighlightSnapshot(compilationUnit, contentHistory.get(i));
+            }
+        }
+        return null;
     }
 
     @Override
@@ -107,19 +124,105 @@ public class JavaFile extends FileEditor {
         return -1;
     }
 
+    public CompletionApplyResult applyCompletion(CompleteItem item, int caretPosition) {
+        String content = getContent();
+        int start = item.getStart();
+        String replacedContent = new StringBuilder(content.substring(0, start))
+            .append(item.getText())
+            .append(content.substring(caretPosition))
+            .toString();
+        List<TextEditSegment> editList = new ArrayList<>();
+        TextEditSegment completionEdit = new TextEditSegment(start, caretPosition, start, start + item.getText().length());
+        editList.add(completionEdit);
+
+        String importQualifiedName = item.getImportQualifiedName();
+        String newContent = replacedContent;
+        if (importQualifiedName != null && !importQualifiedName.isBlank()) {
+            CompilationUnit compilationUnit = getLatestSuccessfulCompilationUnit();
+            if (compilationUnit != null && shouldAddImport(compilationUnit, importQualifiedName)) {
+                ImportInsertion importInsertion = insertImport(replacedContent, compilationUnit, importQualifiedName);
+                newContent = importInsertion.getContent();
+                editList.add(remapIntermediateEditToOriginal(importInsertion.getEditSegment(), completionEdit));
+            }
+        }
+
+        editList.sort(Comparator.comparingInt(TextEditSegment::getOldStart)
+            .thenComparingInt(TextEditSegment::getOldEnd));
+        pendingHighlightEdits = List.copyOf(editList);
+        pendingHighlightContent = newContent;
+        return new CompletionApplyResult(newContent, start + item.getText().length());
+    }
+
+    private TextEditSegment remapIntermediateEditToOriginal(TextEditSegment intermediateEdit, TextEditSegment previousEdit) {
+        int oldStart = mapIntermediateOffsetToOriginal(intermediateEdit.getOldStart(), previousEdit);
+        int oldEnd = mapIntermediateOffsetToOriginal(intermediateEdit.getOldEnd(), previousEdit);
+        return new TextEditSegment(oldStart, oldEnd, intermediateEdit.getNewStart(), intermediateEdit.getNewEnd());
+    }
+
+    private int mapIntermediateOffsetToOriginal(int intermediateOffset, TextEditSegment previousEdit) {
+        int oldLength = previousEdit.getOldEnd() - previousEdit.getOldStart();
+        int newLength = previousEdit.getNewEnd() - previousEdit.getNewStart();
+        int delta = newLength - oldLength;
+        if (intermediateOffset <= previousEdit.getNewStart()) {
+            return intermediateOffset;
+        }
+        if (intermediateOffset >= previousEdit.getNewEnd()) {
+            return intermediateOffset - delta;
+        }
+        return previousEdit.getOldStart();
+    }
+
+    private boolean shouldAddImport(CompilationUnit compilationUnit, String importQualifiedName) {
+        String simpleName = importQualifiedName.substring(importQualifiedName.lastIndexOf('.') + 1);
+        if (JavaUtil.resolvePointByName(getEditor().getIndex(), indexPoint, simpleName, compilationUnit) != null) {
+            return false;
+        }
+        return compilationUnit.getImports().stream()
+            .filter(importDeclaration -> !importDeclaration.isAsterisk())
+            .map(ImportDeclaration::getNameAsString)
+            .noneMatch(importQualifiedName::equals);
+    }
+
+    private ImportInsertion insertImport(String content, CompilationUnit compilationUnit, String importQualifiedName) {
+        String importText;
+        int insertPosition;
+        List<ImportDeclaration> importList = compilationUnit.getImports();
+        if (!importList.isEmpty()) {
+            ImportDeclaration lastImport = importList.getLast();
+            insertPosition = lastImport.getRange().map(range -> getPosition(range.end, content) + 1).orElse(0);
+            importText = "\nimport " + importQualifiedName + ";";
+        } else {
+            Optional<PackageDeclaration> packageDeclaration = compilationUnit.getPackageDeclaration();
+            if (packageDeclaration.isPresent()) {
+                insertPosition = packageDeclaration.get().getRange().map(range -> getPosition(range.end, content) + 1)
+                    .orElse(0);
+                importText = "\n\nimport " + importQualifiedName + ";";
+            } else {
+                insertPosition = 0;
+                importText = "import " + importQualifiedName + ";\n\n";
+            }
+        }
+        String newContent = content.substring(0, insertPosition) + importText + content.substring(insertPosition);
+        return new ImportInsertion(newContent,
+            new TextEditSegment(insertPosition, insertPosition, insertPosition, insertPosition + importText.length()));
+    }
+
     private CompletionContext createCompletionContext(int caretPosition) {
         String content = getContent();
-        int scopeStart = findLastChar(caretPosition, '.', ';');
-        int keywordStart = scopeStart >= 0 ? scopeStart + 1 : 0;
-        while (keywordStart < caretPosition) {
-            char ch = content.charAt(keywordStart);
-            if (!Character.isWhitespace(ch)) {
-                break;
-            }
+        int keywordStart = caretPosition;
+        while (keywordStart > 0 && isCompletionIdentifierChar(content.charAt(keywordStart - 1))) {
+            keywordStart--;
+        }
+        while (keywordStart < caretPosition && Character.isWhitespace(content.charAt(keywordStart))) {
             keywordStart++;
         }
+        int scopeStart = keywordStart > 0 && content.charAt(keywordStart - 1) == '.' ? keywordStart - 1 : -1;
         return new CompletionContext(caretPosition, scopeStart,
             keywordStart, content.substring(keywordStart, caretPosition));
+    }
+
+    private boolean isCompletionIdentifierChar(char ch) {
+        return Character.isLetterOrDigit(ch) || ch == '_' || ch == '$';
     }
 
     private TextCompletionContext createTextCompletionContext(int caretPosition) {
@@ -713,12 +816,18 @@ public class JavaFile extends FileEditor {
 
     @Override
     protected void onContentChanged() {
-        ParseResult<CompilationUnit> parseResult = new JavaParser().parse(getContent());
+        String content = getContent();
+        ParseResult<CompilationUnit> parseResult = new JavaParser().parse(content);
         parseResultHistoryList.add(parseResult);
-        indexPoint = getEditor().getIndex().index(indexPoint.getPkg(), indexPoint.getName(), getContent());
+        contentHistoryList.add(content);
+        indexPoint = getEditor().getIndex().index(indexPoint.getPkg(), indexPoint.getName(), content);
         semanticErrorList.clear();
 
         CompilationUnit unit = parseResult.getResult().orElse(null);
+        if (parseResult.isSuccessful()) {
+            pendingHighlightEdits = null;
+            pendingHighlightContent = null;
+        }
         if (unit == null) {
             return;
         }
@@ -756,17 +865,33 @@ public class JavaFile extends FileEditor {
 
     @Override
     protected StyleSpans<Collection<String>> doComputeHighlighting() {
+        String content = getContent();
         ParseResult<CompilationUnit> parseResult = getLatestParseResult();
-        AtomicReference<StyleSpans<Collection<String>>> result = new AtomicReference<>();
         if (parseResult.isSuccessful()) {
-            parseResult.getResult().ifPresent(cu -> result.set(computeSuccess(cu, getContent())));
-        } else {
-            result.set(computeFail(parseResult.getProblems(), getContent()));
+            CompilationUnit compilationUnit = parseResult.getResult().orElse(null);
+            if (compilationUnit != null) {
+                return computeSuccess(compilationUnit, content);
+            }
         }
-        return result.get();
+
+        HighlightSnapshot snapshot = getLatestSuccessfulHighlightSnapshot();
+        if (snapshot != null) {
+            List<SyntaxHighlight> highlightList = new ArrayList<>(collectSyntaxHighlights(snapshot.getCompilationUnit()));
+            highlightList.addAll(collectProblemHighlights(parseResult.getProblems()));
+            if (pendingHighlightEdits != null && Objects.equals(pendingHighlightContent, content)) {
+                return createStyleSpans(content, highlightList, pendingHighlightEdits, snapshot.getContent());
+            }
+            return createStyleSpans(content, highlightList,
+                List.of(createTextEditSegment(createEditRange(snapshot.getContent(), content))), snapshot.getContent());
+        }
+        return computeFail(parseResult.getProblems(), content);
     }
 
     private static StyleSpans<Collection<String>> computeSuccess(CompilationUnit cu, String text) {
+        return createStyleSpans(text, collectSyntaxHighlights(cu));
+    }
+
+    private static List<SyntaxHighlight> collectSyntaxHighlights(CompilationUnit cu) {
         List<SyntaxHighlight> highlightList = new ArrayList<>();
         cu.accept(new VoidVisitorAdapter<Void>() {
             @Override
@@ -827,20 +952,28 @@ public class JavaFile extends FileEditor {
                 super.visit(n, arg);
             }
         }, null);
-
         highlightList.sort(Comparator.comparing(h -> h.range.begin.line * 1000 + h.range.begin.column));
-        return createStyleSpans(text, highlightList);
+        return highlightList;
+    }
+
+    private static List<SyntaxHighlight> collectProblemHighlights(List<Problem> problemList) {
+        List<SyntaxHighlight> highlightList = new ArrayList<>();
+        problemList.forEach(problem -> problem.getLocation().ifPresent(problemLocation ->
+            highlightList.add(new SyntaxHighlight(problemLocation.toRange().orElse(null), "problem", false))));
+        return highlightList;
     }
 
     private static StyleSpans<Collection<String>> computeFail(List<Problem> problemList, String text) {
-        List<SyntaxHighlight> highlightList = new ArrayList<>();
-        problemList.forEach(problem -> problem.getLocation().ifPresent(problemLocation ->
-            highlightList.add(new SyntaxHighlight(
-                problemLocation.toRange().orElse(null), "problem"))));
-        return createStyleSpans(text, highlightList);
+        return createStyleSpans(text, collectProblemHighlights(problemList));
     }
 
     private static StyleSpans<Collection<String>> createStyleSpans(String text, List<SyntaxHighlight> highlightList) {
+        return createStyleSpans(text, highlightList, null, text);
+    }
+
+    private static StyleSpans<Collection<String>> createStyleSpans(String text, List<SyntaxHighlight> highlightList,
+                                                                   List<TextEditSegment> editList,
+                                                                   String positionText) {
         StyleSpansBuilder<Collection<String>> spansBuilder = new StyleSpansBuilder<>();
         int lastPosition = 0;
 
@@ -849,15 +982,25 @@ public class JavaFile extends FileEditor {
                 continue;
             }
 
-            int start = getPosition(highlight.range.begin, text);
-            int end = getPosition(highlight.range.end, text) + 1;
+            Integer start = highlight.fromOldText ?
+                mapOldOffsetToNewOffset(getPosition(highlight.range.begin, positionText), editList) :
+                getPosition(highlight.range.begin, text);
+            Integer endExclusive = highlight.fromOldText ?
+                mapOldOffsetToNewOffset(getPosition(highlight.range.end, positionText) + 1, editList) :
+                getPosition(highlight.range.end, text) + 1;
+            if (start == null || endExclusive == null) {
+                continue;
+            }
+
+            start = Math.max(0, Math.min(start, text.length()));
+            endExclusive = Math.max(start, Math.min(endExclusive, text.length()));
 
             if (start > lastPosition) {
                 spansBuilder.add(Collections.emptyList(), start - lastPosition);
             }
 
-            spansBuilder.add(Collections.singleton(highlight.styleClass), end - start);
-            lastPosition = end;
+            spansBuilder.add(Collections.singleton(highlight.styleClass), endExclusive - start);
+            lastPosition = endExclusive;
         }
 
         if (lastPosition < text.length()) {
@@ -865,6 +1008,52 @@ public class JavaFile extends FileEditor {
         }
 
         return spansBuilder.create();
+    }
+
+    private static Integer mapOldOffsetToNewOffset(int oldOffset, List<TextEditSegment> editList) {
+        if (editList == null || editList.isEmpty()) {
+            return oldOffset;
+        }
+        int delta = 0;
+        for (TextEditSegment edit : editList) {
+            if (oldOffset < edit.getOldStart()) {
+                break;
+            }
+            if (oldOffset <= edit.getOldEnd()) {
+                if (edit.getOldStart() == edit.getOldEnd()) {
+                    delta += edit.getNewEnd() - edit.getNewStart();
+                    continue;
+                }
+                if (oldOffset == edit.getOldEnd()) {
+                    delta += (edit.getNewEnd() - edit.getNewStart()) - (edit.getOldEnd() - edit.getOldStart());
+                    continue;
+                }
+                return null;
+            }
+            delta += (edit.getNewEnd() - edit.getNewStart()) - (edit.getOldEnd() - edit.getOldStart());
+        }
+        return oldOffset + delta;
+    }
+
+    private static TextEditSegment createTextEditSegment(EditRange editRange) {
+        return new TextEditSegment(editRange.start(), editRange.oldEnd(), editRange.start(),
+            editRange.start() + (editRange.oldEnd() - editRange.start()) + editRange.delta());
+    }
+
+    private static EditRange createEditRange(String oldText, String newText) {
+        int prefix = 0;
+        int maxPrefix = Math.min(oldText.length(), newText.length());
+        while (prefix < maxPrefix && oldText.charAt(prefix) == newText.charAt(prefix)) {
+            prefix++;
+        }
+
+        int oldSuffix = oldText.length();
+        int newSuffix = newText.length();
+        while (oldSuffix > prefix && newSuffix > prefix && oldText.charAt(oldSuffix - 1) == newText.charAt(newSuffix - 1)) {
+            oldSuffix--;
+            newSuffix--;
+        }
+        return new EditRange(prefix, oldSuffix, newSuffix - oldSuffix);
     }
 
     private static int getPosition(Position pos, String text) {
@@ -877,13 +1066,52 @@ public class JavaFile extends FileEditor {
         return Math.min(position, text.length());
     }
 
+    @AllArgsConstructor
+    @Getter
+    public static class CompletionApplyResult {
+        private final String content;
+        private final int caretPosition;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class ImportInsertion {
+        private final String content;
+        private final TextEditSegment editSegment;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class HighlightSnapshot {
+        private final CompilationUnit compilationUnit;
+        private final String content;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class TextEditSegment {
+        private final int oldStart;
+        private final int oldEnd;
+        private final int newStart;
+        private final int newEnd;
+    }
+
+    private record EditRange(int start, int oldEnd, int delta) {
+    }
+
     private static class SyntaxHighlight {
         private final Range range;
         private final String styleClass;
+        private final boolean fromOldText;
 
         private SyntaxHighlight(Range range, String styleClass) {
+            this(range, styleClass, true);
+        }
+
+        private SyntaxHighlight(Range range, String styleClass, boolean fromOldText) {
             this.range = range;
             this.styleClass = styleClass;
+            this.fromOldText = fromOldText;
         }
     }
 

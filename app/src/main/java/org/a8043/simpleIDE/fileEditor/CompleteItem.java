@@ -17,10 +17,11 @@ public class CompleteItem {
     int caretPositionAtBegin;
     int start;
     String text;
+    String importQualifiedName;
 
     public CompleteItem(String imageName, String name, String description,
                         int caretPositionAtBegin, int start, String text) {
-        this(new DefaultNode(imageName, name, description), caretPositionAtBegin, start, text);
+        this(new DefaultNode(imageName, name, description), caretPositionAtBegin, start, text, null);
     }
 
     public CompleteItem(Package completion, int caretPositionAtBegin, int start) {
@@ -29,9 +30,10 @@ public class CompleteItem {
     }
 
     public CompleteItem(IndexPoint completion, int caretPositionAtBegin, int start) {
-        this("class", completion.getName(),
-            completion.getPkg() != null ? completion.getPkg().getFullName() : ".",
-            caretPositionAtBegin, start, completion.getName());
+        this(new DefaultNode("class", completion.getName(),
+                completion.getPkg() != null ? completion.getPkg().getFullName() : "."),
+            caretPositionAtBegin, start, completion.getName(),
+            completion.getPkg() != null ? completion.getPkg().getFullName() + "." + completion.getName() : null);
     }
 
     public static class DefaultNode extends BorderPane {
