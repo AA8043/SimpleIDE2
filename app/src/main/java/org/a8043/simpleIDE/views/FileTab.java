@@ -217,7 +217,7 @@ public class FileTab {
                         event.consume();
                         CompleteItem selectedItem = selectionModel.getSelectedItem();
                         if (selectedItem != null) {
-                            complete(selectedItem.getText());
+                            complete(selectedItem);
                         }
                     }
                 }
@@ -391,11 +391,11 @@ public class FileTab {
         });
     }
 
-    private void complete(String text) {
-        int start = nowCompleteBox.get().getNode().getStartCaretPosition() - 1;
+    private void complete(CompleteItem item) {
+        int start = item.getStart();
         int end = codeArea.getCaretPosition();
-        codeArea.replaceText(start, end, text);
-        codeArea.moveTo(start + text.length());
+        codeArea.replaceText(start, end, item.getText());
+        codeArea.moveTo(start + item.getText().length());
         nowCompleteBox.get().close();
     }
 
@@ -520,7 +520,7 @@ public class FileTab {
                     CompleteItem completeItem = nowCompleteBox.get().getNode()
                         .listView.getSelectionModel().getSelectedItem();
                     if (completeItem != null) {
-                        complete(completeItem.getText());
+                        complete(completeItem);
                     }
                 }
             });

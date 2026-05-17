@@ -108,8 +108,18 @@ public class JavaFile extends FileEditor {
     }
 
     private CompletionContext createCompletionContext(int caretPosition) {
+        String content = getContent();
         int scopeStart = findLastChar(caretPosition, '.', ';');
-        return new CompletionContext(caretPosition, scopeStart, getContent().substring(scopeStart + 1, caretPosition));
+        int keywordStart = scopeStart >= 0 ? scopeStart + 1 : 0;
+        while (keywordStart < caretPosition) {
+            char ch = content.charAt(keywordStart);
+            if (!Character.isWhitespace(ch)) {
+                break;
+            }
+            keywordStart++;
+        }
+        return new CompletionContext(caretPosition, scopeStart,
+            keywordStart, content.substring(keywordStart, caretPosition));
     }
 
     private TextCompletionContext createTextCompletionContext(int caretPosition) {
@@ -120,19 +130,11 @@ public class JavaFile extends FileEditor {
     }
 
     private List<CompleteItem> computeMemberCompletion(TextCompletionContext textContext, CompletionContext context) {
-        String scopeText = extractCompletionScopeText(context.getScopeStart());
-        TextMember typeMember = textContext.findTypeMember(scopeText);
-        if (typeMember != null && typeMember.getTypeName() != null) {
-            IndexPoint scopeType = resolveType(typeMember.getTypeName(), getLatestSuccessfulCompilationUnit());
-            if (scopeType != null) {
-                return createMemberCompletionItems(scopeType, context);
-            }
+        ResolvedCompletionScope scope = resolveCompletionScope(textContext, context);
+        if (scope == null || scope.getType() == null) {
+            return List.of();
         }
-
-        if ("this".equals(scopeText)) {
-            return createCurrentClassMemberItems(textContext, context);
-        }
-        return List.of();
+        return createMemberCompletionItems(scope.getType(), context, scope.isStaticOnly());
     }
 
     private List<CompleteItem> computeGlobalCompletion(TextCompletionContext textContext, CompletionContext context) {
@@ -147,6 +149,112 @@ public class JavaFile extends FileEditor {
             }
         });
         return itemList;
+    }
+
+    private ResolvedCompletionScope resolveCompletionScope(TextCompletionContext textContext, CompletionContext context) {
+        CompilationUnit compilationUnit = getLatestSuccessfulCompilationUnit();
+        String scopeText = extractCompletionScopeText(context.getScopeStart());
+
+        if ("this".equals(scopeText)) {
+            return new ResolvedCompletionScope(indexPoint, false);
+        }
+
+        TextMember typeMember = textContext.findTypeMember(scopeText);
+        if (typeMember != null && typeMember.getTypeName() != null) {
+            IndexPoint scopeType = resolveType(typeMember.getTypeName(), compilationUnit);
+            if (scopeType != null) {
+                return new ResolvedCompletionScope(scopeType, false);
+            }
+        }
+
+        Expression scopeExpression = compilationUnit != null ?
+            findCompletionScopeExpression(compilationUnit, context.getScopeStart()) : null;
+        if (scopeExpression == null) {
+            scopeExpression = parseCompletionScopeExpression(context.getScopeStart());
+        }
+        if (scopeExpression != null) {
+            ResolvedCompletionScope resolvedExpressionScope = resolveExpressionScope(scopeExpression, compilationUnit);
+            if (resolvedExpressionScope != null) {
+                return resolvedExpressionScope;
+            }
+        }
+
+        IndexPoint type = resolveType(scopeText, compilationUnit);
+        if (type != null) {
+            return new ResolvedCompletionScope(type, true);
+        }
+        return null;
+    }
+
+    private ResolvedCompletionScope resolveExpressionScope(Expression expression, CompilationUnit compilationUnit) {
+        return switch (expression) {
+            case ThisExpr ignored -> new ResolvedCompletionScope(indexPoint, false);
+            case SuperExpr ignored ->
+                new ResolvedCompletionScope(indexPoint != null ? indexPoint.getParent() : null, false);
+            case NameExpr nameExpr -> {
+                TextMember visibleMember = compilationUnit == null ? null : findVisibleMember(nameExpr, compilationUnit);
+                if (visibleMember != null && visibleMember.getTypeName() != null) {
+                    IndexPoint type = resolveType(visibleMember.getTypeName(), compilationUnit);
+                    yield type != null ? new ResolvedCompletionScope(type, false) : null;
+                }
+                IndexPoint type = resolveType(nameExpr.getNameAsString(), compilationUnit);
+                yield type != null ? new ResolvedCompletionScope(type, true) : null;
+            }
+            case FieldAccessExpr fieldAccessExpr -> {
+                IndexPoint type = resolveExpressionType(fieldAccessExpr, compilationUnit);
+                yield type != null ? new ResolvedCompletionScope(type, false) : null;
+            }
+            case MethodCallExpr methodCallExpr -> {
+                IndexPoint type = resolveExpressionType(methodCallExpr, compilationUnit);
+                yield type != null ? new ResolvedCompletionScope(type, false) : null;
+            }
+            case EnclosedExpr enclosedExpr -> resolveExpressionScope(enclosedExpr.getInner(), compilationUnit);
+            default -> {
+                IndexPoint type = resolveExpressionType(expression, compilationUnit);
+                yield type != null ? new ResolvedCompletionScope(type, false) : null;
+            }
+        };
+    }
+
+    private TextMember findVisibleMember(NameExpr nameExpr, CompilationUnit compilationUnit) {
+        String name = nameExpr.getNameAsString();
+        MethodDeclaration method = nameExpr.findAncestor(MethodDeclaration.class).orElse(null);
+        if (method != null) {
+            TextMember parameter = method.getParameterByName(name)
+                .map(parameter1 -> new TextMember(parameter1.getNameAsString(),
+                    normalizeTypeName(parameter1.getType().asString()), "variable"))
+                .orElse(null);
+            if (parameter != null) {
+                return parameter;
+            }
+
+            VariableDeclarator variable = method.findAll(VariableDeclarator.class).stream()
+                .filter(declarator -> declarator.getNameAsString().equals(name))
+                .filter(declarator -> {
+                    int variablePosition = declarator.getName().getRange()
+                        .map(range -> getPosition(range.begin, getContent()))
+                        .orElse(Integer.MAX_VALUE);
+                    int currentPosition = nameExpr.getName().getRange()
+                        .map(range -> getPosition(range.begin, getContent()))
+                        .orElse(Integer.MIN_VALUE);
+                    return variablePosition <= currentPosition;
+                })
+                .max(Comparator.comparingInt(declarator -> declarator.getName().getRange()
+                    .map(range -> getPosition(range.begin, getContent())).orElse(-1)))
+                .orElse(null);
+            if (variable != null) {
+                return new TextMember(variable.getNameAsString(),
+                    normalizeTypeName(variable.getType().asString()), "variable");
+            }
+        }
+
+        if (indexPoint != null) {
+            var field = indexPoint.getField(name);
+            if (field != null && field.getType() != null) {
+                return new TextMember(field.getName(), field.getType().getName(), "field");
+            }
+        }
+        return null;
     }
 
     private Expression findCompletionScopeExpression(CompilationUnit compilationUnit, int dotPosition) {
@@ -473,16 +581,21 @@ public class JavaFile extends FileEditor {
     }
 
     private void addMemberCompletionItems(List<CompleteItem> itemList, IndexPoint scopeType,
-                                          int caretPosition, int start, String keyword) {
+                                          int caretPosition, int start, String keyword,
+                                          boolean staticOnly) {
         List<MemberCompletion> memberList = new ArrayList<>();
-        scopeType.getFieldList().forEach(field -> memberList.add(new MemberCompletion(field.getName(),
-            new CompleteItem("field", field.getName(),
-                field.getType() != null ? StrUtil.join(".", (Object[]) field.getType().getPath()) : "void",
-                caretPosition, start, field.getName()))));
-        scopeType.getMethodList().forEach(method -> memberList.add(new MemberCompletion(method.getName(),
-            new CompleteItem("method", method.getName(), method.getReturnType() != null ?
-                StrUtil.join(".", (Object[]) method.getReturnType().getPath()) : "void",
-                caretPosition, start, method.getName()))));
+        scopeType.getFieldList().stream()
+            .filter(field -> !staticOnly || field.isStatic())
+            .forEach(field -> memberList.add(new MemberCompletion(field.getName(),
+                new CompleteItem("field", field.getName(),
+                    field.getType() != null ? StrUtil.join(".", (Object[]) field.getType().getPath()) : "void",
+                    caretPosition, start, field.getName()))));
+        scopeType.getMethodList().stream()
+            .filter(method -> !staticOnly || method.isStatic())
+            .forEach(method -> memberList.add(new MemberCompletion(method.getName(),
+                new CompleteItem("method", method.getName(), method.getReturnType() != null ?
+                    StrUtil.join(".", (Object[]) method.getReturnType().getPath()) : "void",
+                    caretPosition, start, method.getName()))));
 
         List<MemberCompletion> searchResult = SearchUtil.search(memberList, MemberCompletion::getKeyword, keyword);
         Set<String> added = new HashSet<>();
@@ -493,11 +606,19 @@ public class JavaFile extends FileEditor {
         });
     }
 
-    private List<CompleteItem> createMemberCompletionItems(IndexPoint scopeType, CompletionContext context) {
+    private List<CompleteItem> createMemberCompletionItems(IndexPoint scopeType, CompletionContext context,
+                                                           boolean staticOnly) {
         List<CompleteItem> itemList = new ArrayList<>();
         addMemberCompletionItems(itemList, scopeType,
-            context.getCaretPosition(), context.getReplaceStart(), context.getKeyword());
+            context.getCaretPosition(), context.getReplaceStart(), context.getKeyword(), staticOnly);
         return itemList;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class ResolvedCompletionScope {
+        private final IndexPoint type;
+        private final boolean staticOnly;
     }
 
     @AllArgsConstructor
@@ -505,14 +626,11 @@ public class JavaFile extends FileEditor {
     private static class CompletionContext {
         private final int caretPosition;
         private final int scopeStart;
+        private final int replaceStart;
         private final String keyword;
 
         private boolean isMemberCompletion() {
             return scopeStart >= 0;
-        }
-
-        private int getReplaceStart() {
-            return scopeStart >= 0 ? scopeStart + 1 : caretPosition;
         }
     }
 
