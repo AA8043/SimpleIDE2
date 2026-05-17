@@ -23,9 +23,13 @@ public class MethodSignature extends JSONSupport {
     @Override
     public JSONObject toJSON() {
         return new JSONObject().set("name", name).set("access", access).set("isStatic", isStatic)
-            .set("returnType", StrUtil.join(".", returnType != null ? returnType.getPath() : new Object[]{"void"}))
+            .set("returnType", returnType != null ? new JSONObject()
+                .set("path", StrUtil.join(".", (Object[]) returnType.getPath()))
+                .set("moduleName", returnType.getPkg().getModule().getCacheName()) : new JSONObject())
             .set("parameterMap", parameterMap.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey,
-                entry -> StrUtil.join(".", entry.getValue() != null ?
-                    entry.getValue().getPath() : new Object[]{"void"}))));
+                entry -> entry.getValue() != null ? new JSONObject()
+                    .set("path", StrUtil.join(".", (Object[]) entry.getValue().getPath()))
+                    .set("moduleName", entry.getValue().getPkg().getModule().getCacheName()) :
+                    new JSONObject().set("path", "void").set("moduleName", "<basic>"))));
     }
 }

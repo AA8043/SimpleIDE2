@@ -21,6 +21,8 @@ public class FieldSignature extends JSONSupport {
     @Override
     public JSONObject toJSON() {
         return new JSONObject().set("name", name).set("access", access).set("isStatic", isStatic)
-            .set("type", StrUtil.join(".", type != null ? type.getPath() : new Object[]{"void"}));
+            .set("type", type != null ? new JSONObject()
+                .set("path", StrUtil.join(".", (Object[]) type.getPath()))
+                .set("moduleName", type.getPkg().getModule().getCacheName()) : new JSONObject());
     }
 }

@@ -69,8 +69,10 @@ public class Dependency {
 
         @SneakyThrows
         public ZipFile waitFor() {
-            synchronized (lock) {
-                lock.wait();
+            if (zipFile == null) {
+                synchronized (lock) {
+                    lock.wait();
+                }
             }
             return zipFile;
         }

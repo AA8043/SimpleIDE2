@@ -72,6 +72,11 @@ public class Index extends JSONSupport implements Closeable {
             .findFirst().orElse(null);
     }
 
+    public Module getModuleByCacheName(String name) {
+        return moduleList.stream().filter(m -> Objects.equals(m.getCacheName(), name))
+            .findFirst().orElse(null);
+    }
+
     public CompilationUnit getCompilationUnit(IndexPoint point) {
         if (point == null) {
             return null;
@@ -414,6 +419,46 @@ public class Index extends JSONSupport implements Closeable {
             if (parent != null) {
                 pointParentJsonMap.put(point, parent);
             }
+        });
+        json.getJSONArray("indexList").forEach(indexJsonObject -> {
+            JSONObject indexJson = (JSONObject) indexJsonObject;
+            IndexPoint point = getModuleByCacheName(indexJson.getStr("moduleName"))
+                .getPoint(indexJson.getStr("path").split("\\."));
+            indexJson.getJSONArray("methodList").forEach(methodJsonObject -> {
+                JSONObject methodJson = (JSONObject) methodJsonObject;
+                Map<String, IndexPoint> parameterMap = new HashMap<>();
+                methodJson.getJSONObject("parameterMap").forEach((paramName, paramType) -> {
+                    JSONObject typeJson = (JSONObject) paramType;
+                    if (typeJson.isEmpty()) {
+                        return;
+                    }
+                    parameterMap.put(paramName, getModuleByCacheName(typeJson.getStr("moduleName"))
+                        .getPoint(typeJson.getStr("path").split("\\.")));
+                });
+                JSONObject returnTypeJson = methodJson.getJSONObject("returnType");
+                if (returnTypeJson.isEmpty()) {
+                    return;
+                }
+                point.getMethodList().add(new MethodSignature(methodJson.getStr("name"),
+                    Access.valueOf(methodJson.getStr("access")), methodJson.getBool("isStatic"),
+                    getModuleByCacheName(returnTypeJson.getStr("moduleName"))
+                        .getPoint(returnTypeJson.getStr("path").split("\\.")),
+                    parameterMap.entrySet().stream().collect(HashMap::new, (m, e) ->
+                        m.put(e.getKey(), e.getValue()), HashMap::putAll)));
+            });
+            indexJson.getJSONArray("fieldList").forEach(fieldJsonObject -> {
+                JSONObject fieldJson = (JSONObject) fieldJsonObject;
+                JSONObject typeJson = fieldJson.getJSONObject("type");
+                ;
+                if (typeJson.isEmpty()) {
+                    return;
+                }
+                point.getFieldList().add(new FieldSignature(fieldJson.getStr("name"),
+                    Access.valueOf(fieldJson.getStr("access")),
+                    fieldJson.getBool("isStatic"),
+                    getModuleByCacheName(typeJson.getStr("moduleName"))
+                        .getPoint(typeJson.getStr("path").split("\\."))));
+            });
         });
         pointParentJsonMap.forEach((point, parentName) -> {
             IndexPoint parent = indexList.stream().filter(p ->

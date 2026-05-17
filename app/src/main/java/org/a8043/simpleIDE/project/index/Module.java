@@ -70,9 +70,7 @@ public class Module extends JSONSupport {
     }
 
     public IndexPoint getPoint(String[] path) {
-        return index.getIndexList().stream().filter(point ->
-                point != null && point.getName().equals(path[path.length - 1]) &&
-                point.getPkg() == getPackage(ArrayUtil.sub(path, 0, path.length - 1)))
+        return index.getIndexList().stream().filter(point -> ArrayUtil.equals(point.getPath(), path))
             .findFirst().orElse(null);
     }
 

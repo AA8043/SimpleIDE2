@@ -396,7 +396,8 @@ public class JavaFile extends FileEditor {
                     yield null;
                 }
                 List<MethodSignature> methodList = scopeType.getMethodList(methodCallExpr.getNameAsString());
-                yield methodList.isEmpty() ? null : methodList.getFirst().getReturnType();
+                MethodSignature methodSignature = methodList.stream().filter(Objects::nonNull).findFirst().orElse(null);
+                yield methodSignature != null ? methodSignature.getReturnType() : null;
             }
             case FieldAccessExpr fieldAccessExpr -> {
                 IndexPoint scopeType = resolveExpressionType(fieldAccessExpr.getScope(), compilationUnit);
@@ -849,7 +850,8 @@ public class JavaFile extends FileEditor {
                 .forEach(modifier -> sb.append(modifier).append(" "));
             sb.append(StrUtil.join(".", (Object[]) methodSignature.get().getReturnType().getPath()))
                 .append(" ").append(methodSignature.get().getName()).append(" (\n");
-            paramTagMap.keySet().forEach(name -> sb.append("    ").append(name).append("\n"));
+            methodSignature.get().getParameterMap().forEach((name, type) -> sb.append("    ")
+                .append(StrUtil.join(".", (Object[]) type.getPath())).append(" ").append(name).append(",\n"));
             sb.append(")\n\n---\n\n");
             sb.append(description).append("\n");
             otherTagMap.forEach((k, v) -> sb.append("@").append(k).append(" ").append(v).append("\n"));
