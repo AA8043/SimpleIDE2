@@ -6,14 +6,8 @@ import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.StrUtil;
 import com.github.javaparser.*;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.ImportDeclaration;
-import com.github.javaparser.ast.Modifier;
-import com.github.javaparser.ast.PackageDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.*;
+import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.*;
@@ -23,9 +17,7 @@ import com.github.javaparser.javadoc.Javadoc;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.a8043.simpleIDE.project.ProjectEditor;
-import org.a8043.simpleIDE.project.index.Index;
-import org.a8043.simpleIDE.project.index.IndexPoint;
-import org.a8043.simpleIDE.project.index.MethodSignature;
+import org.a8043.simpleIDE.project.index.*;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.FileUtil;
 import org.a8043.simpleIDE.util.FixedList;
@@ -1243,6 +1235,12 @@ public class JavaFile extends FileEditor {
     private record EditRange(int start, int oldEnd, int delta) {
     }
 
+    private record FieldLookup(IndexPoint owner, FieldSignature signature) {
+    }
+
+    private record HoverDoc(String description, Map<String, String> paramTagMap, Map<String, String> otherTagMap) {
+    }
+
     private static class SyntaxHighlight {
         private final Range range;
         private final String styleClass;
@@ -1266,14 +1264,26 @@ public class JavaFile extends FileEditor {
             return "";
         }
 
+        String methodHoverTip = computeMethodHoverTip(position, compilationUnit);
+        if (!methodHoverTip.isBlank()) {
+            return methodHoverTip;
+        }
+        return computeSymbolHoverTip(position, compilationUnit);
+    }
+
+    private String computeMethodHoverTip(int position, CompilationUnit compilationUnit) {
         AtomicReference<MethodDeclaration> methodDeclaration = new AtomicReference<>();
         AtomicReference<MethodSignature> methodSignature = new AtomicReference<>();
         AtomicReference<IndexPoint> source = new AtomicReference<>();
         compilationUnit.accept(new VoidVisitorAdapter<Void>() {
             @Override
             public void visit(MethodCallExpr n, Void arg) {
+                if (methodSignature.get() != null) {
+                    return;
+                }
                 Range range;
                 if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
                     return;
                 }
                 Index index = getEditor().getIndex();
@@ -1292,11 +1302,8 @@ public class JavaFile extends FileEditor {
                             yield methodSignature1.getReturnType();
                         }
                         case FieldAccessExpr fieldAccessExpr -> {
-                            if (lastPoint == null) {
-                                yield null;
-                            }
-                            var field = lastPoint.getField(fieldAccessExpr.getNameAsString());
-                            yield field != null ? field.getType() : null;
+                            FieldLookup fieldLookup = resolveFieldLookup(lastPoint, fieldAccessExpr.getNameAsString());
+                            yield fieldLookup != null ? fieldLookup.signature().getType() : null;
                         }
                         case NameExpr nameExpr -> resolveExpressionType(nameExpr, compilationUnit);
                         case ThisExpr ignored -> lastPoint != null ? lastPoint : indexPoint;
@@ -1307,7 +1314,6 @@ public class JavaFile extends FileEditor {
                         default -> resolveExpressionType(expr, compilationUnit);
                     });
                 }
-                super.visit(n, arg);
 
                 IndexPoint in = lastPointList.get(lastPointList.size() - 2);
                 source.set(in);
@@ -1318,43 +1324,346 @@ public class JavaFile extends FileEditor {
             }
         }, null);
 
-        if (methodDeclaration.get() != null && methodSignature.get() != null && source.get() != null) {
-            Javadoc javadoc = methodDeclaration.get().getJavadoc().orElse(null);
-            if (javadoc == null) {
-                return "";
-            }
+        if (methodSignature.get() == null || source.get() == null) {
+            return "";
+        }
+        return formatMethodHover(source.get(), methodDeclaration.get(), methodSignature.get());
+    }
 
-            Map<String, String> paramTagMap = new HashMap<>();
-            Map<String, String> otherTagMap = new HashMap<>();
-            String description = javadoc.getDescription().toText();
-
-            javadoc.getBlockTags().forEach(tag -> {
-                if ("param".equals(tag.getTagName())) {
-                    paramTagMap.put(tag.getName().orElse(""), tag.getContent().toText());
-                } else {
-                    otherTagMap.put(tag.getTagName(), tag.getContent().toText());
+    private String computeSymbolHoverTip(int position, CompilationUnit compilationUnit) {
+        AtomicReference<String> hoverTip = new AtomicReference<>("");
+        compilationUnit.accept(new VoidVisitorAdapter<Void>() {
+            @Override
+            public void visit(VariableDeclarator n, Void arg) {
+                if (!hoverTip.get().isBlank()) {
+                    return;
                 }
-            });
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("### ").append(StrUtil.join(".", (Object[]) source.get().getPath())).append("\n");
-            methodDeclaration.get().getModifiers().stream()
-                .map(modifier -> modifier.getKeyword().asString())
-                .forEach(modifier -> sb.append(modifier).append(" "));
-            sb.append(StrUtil.join(".", (Object[]) methodSignature.get().getReturnType().getPath()))
-                .append(" ").append(methodSignature.get().getName()).append(" (\n");
-            methodSignature.get().getParameterMap().forEach((name, type) -> sb.append("    ")
-                .append(StrUtil.join(".", (Object[]) type.getPath())).append(" ").append(name).append(",\n"));
-            sb.append(")\n\n---\n\n");
-            sb.append(description).append("\n");
-            otherTagMap.forEach((k, v) -> sb.append("@").append(k).append(" ").append(v).append("\n"));
-            if (!paramTagMap.isEmpty()) {
-                sb.append("\n---\n\n");
-                paramTagMap.forEach((name, desc) -> sb.append(name).append(": ").append(desc).append("\n"));
+                Range range;
+                if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
+                    return;
+                }
+                FieldDeclaration fieldDeclaration = n.findAncestor(FieldDeclaration.class).orElse(null);
+                if (fieldDeclaration != null) {
+                    FieldLookup fieldLookup = resolveFieldLookup(indexPoint, n.getNameAsString());
+                    hoverTip.set(fieldLookup != null ?
+                        formatFieldHover(fieldLookup.owner(), fieldLookup.signature(), fieldDeclaration, n) :
+                        formatLocalHover(n, "field"));
+                    return;
+                }
+                hoverTip.set(formatLocalHover(n, "variable"));
             }
-            return sb.toString();
+
+            @Override
+            public void visit(Parameter n, Void arg) {
+                if (!hoverTip.get().isBlank()) {
+                    return;
+                }
+                Range range;
+                if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
+                    return;
+                }
+                hoverTip.set(formatParameterHover(n));
+            }
+
+            @Override
+            public void visit(FieldAccessExpr n, Void arg) {
+                if (!hoverTip.get().isBlank()) {
+                    return;
+                }
+                Range range;
+                if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
+                    return;
+                }
+                FieldLookup fieldLookup = resolveFieldLookup(resolveExpressionType(n.getScope(), compilationUnit),
+                    n.getNameAsString());
+                if (fieldLookup != null) {
+                    VariableDeclarator fieldVariable = resolveFieldVariable(fieldLookup.owner(), n.getNameAsString());
+                    FieldDeclaration fieldDeclaration = fieldVariable != null ?
+                        fieldVariable.findAncestor(FieldDeclaration.class).orElse(null) : null;
+                    hoverTip.set(formatFieldHover(fieldLookup.owner(), fieldLookup.signature(), fieldDeclaration,
+                        fieldVariable));
+                }
+            }
+
+            @Override
+            public void visit(NameExpr n, Void arg) {
+                if (!hoverTip.get().isBlank()) {
+                    return;
+                }
+                Range range;
+                if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
+                    return;
+                }
+                hoverTip.set(resolveNameHoverTip(n, compilationUnit));
+            }
+
+            @Override
+            public void visit(ClassOrInterfaceDeclaration n, Void arg) {
+                if (!hoverTip.get().isBlank()) {
+                    return;
+                }
+                Range range;
+                if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
+                    return;
+                }
+                IndexPoint typePoint = resolveType(n.getNameAsString(), compilationUnit);
+                if (typePoint == null && indexPoint != null && indexPoint.getName().equals(n.getNameAsString())) {
+                    typePoint = indexPoint;
+                }
+                if (typePoint != null) {
+                    hoverTip.set(formatTypeHover(typePoint, n));
+                }
+            }
+
+            @Override
+            public void visit(ClassOrInterfaceType n, Void arg) {
+                if (!hoverTip.get().isBlank()) {
+                    return;
+                }
+                Range range;
+                if ((range = n.getName().getRange().orElse(null)) == null || !isInRange(position, range)) {
+                    super.visit(n, arg);
+                    return;
+                }
+                IndexPoint typePoint = resolveType(n.getNameWithScope(), compilationUnit);
+                if (typePoint == null) {
+                    typePoint = resolveType(n.getNameAsString(), compilationUnit);
+                }
+                if (typePoint != null) {
+                    ClassOrInterfaceDeclaration declaration = resolveTypeDeclaration(typePoint);
+                    hoverTip.set(formatTypeHover(typePoint, declaration));
+                }
+            }
+        }, null);
+        return hoverTip.get();
+    }
+
+    private String resolveNameHoverTip(NameExpr nameExpr, CompilationUnit compilationUnit) {
+        Parameter parameter = resolveVisibleParameter(nameExpr);
+        if (parameter != null) {
+            return formatParameterHover(parameter);
+        }
+
+        VariableDeclarator localVariable = resolveVisibleLocalVariable(nameExpr);
+        if (localVariable != null) {
+            return formatLocalHover(localVariable, "variable");
+        }
+
+        FieldLookup fieldLookup = resolveFieldLookup(indexPoint, nameExpr.getNameAsString());
+        if (fieldLookup != null) {
+            VariableDeclarator fieldVariable = resolveFieldVariable(fieldLookup.owner(), nameExpr.getNameAsString());
+            FieldDeclaration fieldDeclaration = fieldVariable != null ?
+                fieldVariable.findAncestor(FieldDeclaration.class).orElse(null) : null;
+            return formatFieldHover(fieldLookup.owner(), fieldLookup.signature(), fieldDeclaration, fieldVariable);
+        }
+
+        IndexPoint typePoint = resolveType(nameExpr.getNameAsString(), compilationUnit);
+        if (typePoint != null) {
+            return formatTypeHover(typePoint, resolveTypeDeclaration(typePoint));
         }
         return "";
+    }
+
+    private Parameter resolveVisibleParameter(NameExpr nameExpr) {
+        MethodDeclaration method = nameExpr.findAncestor(MethodDeclaration.class).orElse(null);
+        if (method == null) {
+            return null;
+        }
+        return method.getParameterByName(nameExpr.getNameAsString()).orElse(null);
+    }
+
+    private VariableDeclarator resolveVisibleLocalVariable(NameExpr nameExpr) {
+        MethodDeclaration method = nameExpr.findAncestor(MethodDeclaration.class).orElse(null);
+        if (method == null) {
+            return null;
+        }
+
+        int currentPosition = nameExpr.getName().getRange()
+            .map(range -> getPosition(range.begin, getContent()))
+            .orElse(Integer.MIN_VALUE);
+        return method.findAll(VariableDeclarator.class).stream()
+            .filter(declarator -> declarator.getNameAsString().equals(nameExpr.getNameAsString()))
+            .filter(declarator -> declarator.findAncestor(FieldDeclaration.class).isEmpty())
+            .filter(declarator -> declarator.getName().getRange()
+                                      .map(range -> getPosition(range.begin, getContent()))
+                                      .orElse(Integer.MAX_VALUE) <= currentPosition)
+            .max(Comparator.comparingInt(declarator -> declarator.getName().getRange()
+                .map(range -> getPosition(range.begin, getContent())).orElse(-1)))
+            .orElse(null);
+    }
+
+    private FieldLookup resolveFieldLookup(IndexPoint startPoint, String fieldName) {
+        for (IndexPoint current = startPoint; current != null; current = current.getParent()) {
+            FieldSignature fieldSignature = current.getField(fieldName);
+            if (fieldSignature != null) {
+                return new FieldLookup(current, fieldSignature);
+            }
+        }
+        return null;
+    }
+
+    private VariableDeclarator resolveFieldVariable(IndexPoint owner, String fieldName) {
+        CompilationUnit sourceCompilationUnit = owner != null ? getEditor().getIndex().getCompilationUnit(owner) : null;
+        if (sourceCompilationUnit == null) {
+            return null;
+        }
+        return sourceCompilationUnit.findAll(VariableDeclarator.class).stream()
+            .filter(variable -> variable.findAncestor(FieldDeclaration.class).isPresent())
+            .filter(variable -> variable.getNameAsString().equals(fieldName))
+            .findFirst().orElse(null);
+    }
+
+    private ClassOrInterfaceDeclaration resolveTypeDeclaration(IndexPoint typePoint) {
+        CompilationUnit sourceCompilationUnit = typePoint != null ? getEditor().getIndex().getCompilationUnit(typePoint) : null;
+        if (sourceCompilationUnit == null) {
+            return null;
+        }
+        return sourceCompilationUnit.findAll(ClassOrInterfaceDeclaration.class).stream()
+            .filter(declaration -> declaration.getNameAsString().equals(typePoint.getName()))
+            .findFirst().orElse(null);
+    }
+
+    private String formatMethodHover(IndexPoint source, MethodDeclaration methodDeclaration,
+                                     MethodSignature methodSignature) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("### ").append(formatIndexPointPath(source)).append("\n");
+        appendModifiers(sb, methodDeclaration != null ? methodDeclaration.getModifiers() : null,
+            methodSignature.getAccess(), methodSignature.isStatic());
+        sb.append(methodDeclaration != null ? normalizeTypeName(methodDeclaration.getType().asString()) :
+                formatIndexPointPath(methodSignature.getReturnType()))
+            .append(" ").append(methodSignature.getName()).append(" (\n");
+        if (methodDeclaration != null) {
+            methodDeclaration.getParameters().forEach(parameter -> sb.append("    ")
+                .append(normalizeTypeName(parameter.getType().asString()))
+                .append(" ").append(parameter.getNameAsString()).append(",\n"));
+        } else {
+            methodSignature.getParameterMap().forEach((name, type) -> sb.append("    ")
+                .append(formatIndexPointPath(type)).append(" ").append(name).append(",\n"));
+        }
+        sb.append(")");
+        appendJavadocSection(sb, methodDeclaration != null ? methodDeclaration.getJavadoc().orElse(null) : null, true);
+        return sb.toString();
+    }
+
+    private String formatFieldHover(IndexPoint owner, FieldSignature fieldSignature, FieldDeclaration fieldDeclaration,
+                                    VariableDeclarator fieldVariable) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("### ").append(formatIndexPointPath(owner)).append("\n");
+        appendModifiers(sb, fieldDeclaration != null ? fieldDeclaration.getModifiers() : null,
+            fieldSignature.getAccess(), fieldSignature.isStatic());
+        sb.append(fieldVariable != null ? normalizeTypeName(fieldVariable.getType().asString()) :
+                formatIndexPointPath(fieldSignature.getType()))
+            .append(" ").append(fieldSignature.getName());
+        appendJavadocSection(sb, fieldDeclaration != null ? fieldDeclaration.getJavadoc().orElse(null) : null, false);
+        return sb.toString();
+    }
+
+    private String formatLocalHover(VariableDeclarator variableDeclarator, String kind) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("### ").append(formatNodeContext(variableDeclarator)).append("\n");
+        sb.append(kind).append(" ")
+            .append(normalizeTypeName(variableDeclarator.getType().asString()))
+            .append(" ").append(variableDeclarator.getNameAsString());
+        return sb.toString();
+    }
+
+    private String formatParameterHover(Parameter parameter) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("### ").append(formatNodeContext(parameter)).append("\n");
+        sb.append("parameter ")
+            .append(normalizeTypeName(parameter.getType().asString()))
+            .append(" ").append(parameter.getNameAsString());
+        return sb.toString();
+    }
+
+    private String formatTypeHover(IndexPoint typePoint, ClassOrInterfaceDeclaration declaration) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("### ").append(formatIndexPointPath(typePoint)).append("\n");
+        if (declaration != null) {
+            appendModifiers(sb, declaration.getModifiers(), null, false);
+            sb.append(declaration.isInterface() ? "interface " : "class ")
+                .append(declaration.getNameAsString());
+            appendJavadocSection(sb, declaration.getJavadoc().orElse(null), false);
+        } else {
+            sb.append("class ").append(typePoint.getName());
+        }
+        return sb.toString();
+    }
+
+    private void appendModifiers(StringBuilder sb, NodeList<Modifier> modifiers, Access access, boolean isStatic) {
+        if (modifiers != null) {
+            modifiers.stream().map(modifier -> modifier.getKeyword().asString())
+                .forEach(modifier -> sb.append(modifier).append(" "));
+            return;
+        }
+        if (access != null) {
+            String accessText = switch (access) {
+                case PUBLIC -> "public";
+                case PROTECTED -> "protected";
+                case PRIVATE -> "private";
+                case PACKAGE_PRIVATE -> "";
+            };
+            if (!accessText.isBlank()) {
+                sb.append(accessText).append(" ");
+            }
+        }
+        if (isStatic) {
+            sb.append("static ");
+        }
+    }
+
+    private void appendJavadocSection(StringBuilder sb, Javadoc javadoc, boolean includeParamTags) {
+        HoverDoc hoverDoc = parseJavadoc(javadoc);
+        if (hoverDoc == null) {
+            return;
+        }
+        boolean hasMainSection = !hoverDoc.description().isBlank() || !hoverDoc.otherTagMap().isEmpty();
+        if (hasMainSection) {
+            sb.append("\n\n---\n\n");
+            if (!hoverDoc.description().isBlank()) {
+                sb.append(hoverDoc.description()).append("\n");
+            }
+            hoverDoc.otherTagMap().forEach((tagName, content) ->
+                sb.append("@").append(tagName).append(" ").append(content).append("\n"));
+        }
+        if (includeParamTags && !hoverDoc.paramTagMap().isEmpty()) {
+            sb.append("\n---\n\n");
+            hoverDoc.paramTagMap().forEach((name, description) ->
+                sb.append(name).append(": ").append(description).append("\n"));
+        }
+    }
+
+    private HoverDoc parseJavadoc(Javadoc javadoc) {
+        if (javadoc == null) {
+            return null;
+        }
+        Map<String, String> paramTagMap = new LinkedHashMap<>();
+        Map<String, String> otherTagMap = new LinkedHashMap<>();
+        javadoc.getBlockTags().forEach(tag -> {
+            if ("param".equals(tag.getTagName())) {
+                paramTagMap.put(tag.getName().orElse(""), tag.getContent().toText());
+            } else {
+                otherTagMap.put(tag.getTagName(), tag.getContent().toText());
+            }
+        });
+        return new HoverDoc(javadoc.getDescription().toText(), paramTagMap, otherTagMap);
+    }
+
+    private String formatIndexPointPath(IndexPoint point) {
+        return point != null ? StrUtil.join(".", (Object[]) point.getPath()) : "unknown";
+    }
+
+    private String formatNodeContext(Node node) {
+        MethodDeclaration methodDeclaration = node.findAncestor(MethodDeclaration.class).orElse(null);
+        if (methodDeclaration != null && indexPoint != null) {
+            return formatIndexPointPath(indexPoint) + "." + methodDeclaration.getNameAsString();
+        }
+        return formatIndexPointPath(indexPoint);
     }
 
     private MethodDeclaration resolveMethodDeclaration(CompilationUnit sourceCompilationUnit,
