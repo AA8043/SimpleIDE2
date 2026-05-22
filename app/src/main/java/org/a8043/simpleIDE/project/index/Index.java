@@ -138,7 +138,7 @@ public class Index extends JSONSupport implements Closeable {
                 module.getOrCreatePackage(ArrayUtil.sub(path, 0, path.length - 1)), null, this);
             indexList.add(point);
             type.getMethods().forEach(method -> {
-                Map<String, IncompleteType> parameterMap = new HashMap<>();
+                Map<String, IncompleteType> parameterMap = new LinkedHashMap<>();
                 method.getParameters().forEach(parameter -> parameterMap.put(parameter.getNameAsString(),
                     createIncompleteType(point, unit, parameter.getType().asString())));
                 String typeString = method.getType().asString();
@@ -160,10 +160,15 @@ public class Index extends JSONSupport implements Closeable {
     private void indexMethodAndField(List<MethodIndexTemp> methodTempList, List<FieldIndexTemp> fieldTempList) {
         methodTempList.forEach(temp -> {
             IndexPoint in = temp.getIn();
-            Map<String, IndexPoint> parameterMap = new HashMap<>();
-            temp.getParameterMap().forEach((name, type) -> parameterMap.put(name, type.getPoint(in)));
+            Map<String, IndexPoint> parameterMap = new LinkedHashMap<>();
+            List<IndexPoint> parameterTypeList = new ArrayList<>();
+            temp.getParameterMap().forEach((name, type) -> {
+                IndexPoint parameterType = type.getPoint(in);
+                parameterMap.put(name, parameterType);
+                parameterTypeList.add(parameterType);
+            });
             in.getMethodList().add(new MethodSignature(temp.getName(), temp.getAccess(), temp.isStatic(),
-                temp.getReturnType().getPoint(in), parameterMap));
+                temp.getReturnType().getPoint(in), parameterMap, parameterTypeList));
         });
         fieldTempList.forEach(temp -> {
             IndexPoint in = temp.getIn();
@@ -426,7 +431,7 @@ public class Index extends JSONSupport implements Closeable {
                 .getPoint(indexJson.getStr("path").split("\\."));
             indexJson.getJSONArray("methodList").forEach(methodJsonObject -> {
                 JSONObject methodJson = (JSONObject) methodJsonObject;
-                Map<String, IndexPoint> parameterMap = new HashMap<>();
+                Map<String, IndexPoint> parameterMap = new LinkedHashMap<>();
                 methodJson.getJSONObject("parameterMap").forEach((paramName, paramType) -> {
                     JSONObject typeJson = (JSONObject) paramType;
                     if (typeJson.isEmpty()) {
@@ -439,12 +444,25 @@ public class Index extends JSONSupport implements Closeable {
                 if (returnTypeJson.isEmpty()) {
                     return;
                 }
+                List<IndexPoint> parameterTypeList = new ArrayList<>();
+                if (methodJson.containsKey("parameterTypeList")) {
+                    methodJson.getJSONArray("parameterTypeList").forEach(parameterTypeObject -> {
+                        JSONObject typeJson = (JSONObject) parameterTypeObject;
+                        if (typeJson.isEmpty()) {
+                            parameterTypeList.add(null);
+                            return;
+                        }
+                        parameterTypeList.add(getModuleByCacheName(typeJson.getStr("moduleName"))
+                            .getPoint(typeJson.getStr("path").split("\\.")));
+                    });
+                } else {
+                    parameterTypeList.addAll(parameterMap.values());
+                }
                 point.getMethodList().add(new MethodSignature(methodJson.getStr("name"),
                     Access.valueOf(methodJson.getStr("access")), methodJson.getBool("isStatic"),
                     getModuleByCacheName(returnTypeJson.getStr("moduleName"))
                         .getPoint(returnTypeJson.getStr("path").split("\\.")),
-                    parameterMap.entrySet().stream().collect(HashMap::new, (m, e) ->
-                        m.put(e.getKey(), e.getValue()), HashMap::putAll)));
+                    parameterMap, parameterTypeList));
             });
             indexJson.getJSONArray("fieldList").forEach(fieldJsonObject -> {
                 JSONObject fieldJson = (JSONObject) fieldJsonObject;

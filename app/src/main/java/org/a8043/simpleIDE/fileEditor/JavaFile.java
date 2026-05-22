@@ -45,6 +45,16 @@ import java.util.stream.Stream;
 
 public class JavaFile extends FileEditor {
     public static final String STYLE = ResourceUtil.readUtf8Str("styles/JavaHighlighter.css");
+    private static final Map<String, String> WRAPPER_TO_PRIMITIVE = Map.of(
+        "Boolean", "boolean",
+        "Byte", "byte",
+        "Short", "short",
+        "Character", "char",
+        "Integer", "int",
+        "Long", "long",
+        "Float", "float",
+        "Double", "double"
+    );
     private final List<ParseResult<CompilationUnit>> parseResultHistoryList = new FixedList<>(10);
     private final List<String> contentHistoryList = new FixedList<>(10);
     private final List<CodeError> semanticErrorList = new ArrayList<>();
@@ -603,11 +613,7 @@ public class JavaFile extends FileEditor {
             case MethodCallExpr methodCallExpr -> {
                 IndexPoint scopeType = methodCallExpr.getScope()
                     .map(scope -> resolveExpressionType(scope, compilationUnit)).orElse(indexPoint);
-                if (scopeType == null) {
-                    yield null;
-                }
-                List<MethodSignature> methodList = scopeType.getMethodList(methodCallExpr.getNameAsString());
-                MethodSignature methodSignature = methodList.stream().filter(Objects::nonNull).findFirst().orElse(null);
+                MethodSignature methodSignature = resolveMethodSignature(scopeType, methodCallExpr, compilationUnit);
                 yield methodSignature != null ? methodSignature.getReturnType() : null;
             }
             case FieldAccessExpr fieldAccessExpr -> {
@@ -618,6 +624,19 @@ public class JavaFile extends FileEditor {
                 var field = scopeType.getField(fieldAccessExpr.getNameAsString());
                 yield field != null ? field.getType() : null;
             }
+            case ThisExpr ignored -> indexPoint;
+            case SuperExpr ignored -> indexPoint != null ? indexPoint.getParent() : null;
+            case EnclosedExpr enclosedExpr -> resolveExpressionType(enclosedExpr.getInner(), compilationUnit);
+            case CastExpr castExpr -> resolveType(castExpr.getType().asString(), compilationUnit);
+            case ObjectCreationExpr objectCreationExpr ->
+                resolveType(objectCreationExpr.getType().asString(), compilationUnit);
+            case StringLiteralExpr ignored -> resolveType("String", compilationUnit);
+            case IntegerLiteralExpr ignored -> resolveType("int", compilationUnit);
+            case LongLiteralExpr ignored -> resolveType("long", compilationUnit);
+            case DoubleLiteralExpr ignored -> resolveType("double", compilationUnit);
+            case BooleanLiteralExpr ignored -> resolveType("boolean", compilationUnit);
+            case CharLiteralExpr ignored -> resolveType("char", compilationUnit);
+            case UnaryExpr unaryExpr -> resolveExpressionType(unaryExpr.getExpression(), compilationUnit);
             default -> null;
         };
     }
@@ -681,6 +700,131 @@ public class JavaFile extends FileEditor {
     private IndexPoint resolveType(String typeName, CompilationUnit compilationUnit) {
         String normalizedTypeName = typeName.replace("[]", "");
         return JavaUtil.resolvePointByName(getEditor().getIndex(), indexPoint, normalizedTypeName, compilationUnit);
+    }
+
+    private MethodSignature resolveMethodSignature(IndexPoint scopeType, MethodCallExpr methodCallExpr,
+                                                   CompilationUnit compilationUnit) {
+        if (scopeType == null) {
+            return null;
+        }
+        List<MethodSignature> methodList = scopeType.getMethodList(methodCallExpr.getNameAsString()).stream()
+            .filter(Objects::nonNull).toList();
+        if (methodList.isEmpty()) {
+            return null;
+        }
+        if (methodList.size() == 1) {
+            return methodList.getFirst();
+        }
+
+        List<IndexPoint> argumentTypeList = resolveArgumentTypes(methodCallExpr.getArguments(), compilationUnit);
+        List<MethodSignature> sameParameterCountMethodList = methodList.stream()
+            .filter(methodSignature -> methodSignature.getParameterCount() == argumentTypeList.size())
+            .toList();
+        if (sameParameterCountMethodList.size() == 1) {
+            return sameParameterCountMethodList.getFirst();
+        }
+
+        MethodSignature methodSignature = selectBestMethodSignature(sameParameterCountMethodList.isEmpty() ?
+            methodList : sameParameterCountMethodList, argumentTypeList);
+        if (methodSignature != null) {
+            return methodSignature;
+        }
+        return sameParameterCountMethodList.isEmpty() ? methodList.getFirst() : sameParameterCountMethodList.getFirst();
+    }
+
+    private MethodSignature selectBestMethodSignature(List<MethodSignature> methodList, List<IndexPoint> argumentTypeList) {
+        MethodSignature bestMethod = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (MethodSignature methodSignature : methodList) {
+            int score = scoreMethodMatch(methodSignature.getParameterTypeList(), argumentTypeList);
+            if (score > bestScore) {
+                bestMethod = methodSignature;
+                bestScore = score;
+            }
+        }
+        return bestScore >= 0 ? bestMethod : null;
+    }
+
+    private List<IndexPoint> resolveArgumentTypes(List<Expression> argumentList, CompilationUnit compilationUnit) {
+        return argumentList.stream().map(argument -> resolveExpressionType(argument, compilationUnit)).toList();
+    }
+
+    private int scoreMethodMatch(List<IndexPoint> parameterTypeList, List<IndexPoint> argumentTypeList) {
+        if (parameterTypeList.size() != argumentTypeList.size()) {
+            return -1;
+        }
+        int score = 0;
+        for (int i = 0; i < parameterTypeList.size(); i++) {
+            IndexPoint parameterType = parameterTypeList.get(i);
+            IndexPoint argumentType = argumentTypeList.get(i);
+            if (parameterType == null || argumentType == null) {
+                continue;
+            }
+            if (isSameType(argumentType, parameterType)) {
+                score += 100;
+                continue;
+            }
+            if (isBoxingCompatible(argumentType, parameterType)) {
+                score += 90;
+                continue;
+            }
+            if (isPrimitiveWideningCompatible(argumentType, parameterType)) {
+                score += 80;
+                continue;
+            }
+            if (isAssignableType(argumentType, parameterType)) {
+                score += 70;
+                continue;
+            }
+            return -1;
+        }
+        return score;
+    }
+
+    private boolean isAssignableType(IndexPoint actualType, IndexPoint expectedType) {
+        for (IndexPoint current = actualType; current != null; current = current.getParent()) {
+            if (isSameType(current, expectedType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isSameType(IndexPoint left, IndexPoint right) {
+        return left == right || left != null && right != null &&
+                                Objects.equals(left.getPkg().getModule().getCacheName(), right.getPkg().getModule().getCacheName()) &&
+                                Arrays.equals(left.getPath(), right.getPath());
+    }
+
+    private boolean isBoxingCompatible(IndexPoint actualType, IndexPoint expectedType) {
+        String actualName = normalizePrimitiveName(actualType);
+        String expectedName = normalizePrimitiveName(expectedType);
+        return actualName != null && actualName.equals(expectedName) &&
+               !Objects.equals(actualType.getName(), expectedType.getName());
+    }
+
+    private boolean isPrimitiveWideningCompatible(IndexPoint actualType, IndexPoint expectedType) {
+        String actualName = normalizePrimitiveName(actualType);
+        String expectedName = normalizePrimitiveName(expectedType);
+        if (actualName == null || expectedName == null || actualName.equals(expectedName)) {
+            return false;
+        }
+        return switch (actualName) {
+            case "byte" -> Set.of("short", "int", "long", "float", "double").contains(expectedName);
+            case "short" -> Set.of("int", "long", "float", "double").contains(expectedName);
+            case "char" -> Set.of("int", "long", "float", "double").contains(expectedName);
+            case "int" -> Set.of("long", "float", "double").contains(expectedName);
+            case "long" -> Set.of("float", "double").contains(expectedName);
+            case "float" -> "double".equals(expectedName);
+            default -> false;
+        };
+    }
+
+    private String normalizePrimitiveName(IndexPoint type) {
+        if (type == null) {
+            return null;
+        }
+        return WRAPPER_TO_PRIMITIVE.getOrDefault(type.getName(), type.getName());
     }
 
     private void addMemberCompletionItems(List<CompleteItem> itemList, IndexPoint scopeType,
@@ -1139,35 +1283,38 @@ public class JavaFile extends FileEditor {
                     IndexPoint lastPoint = lastPointList.getLast();
                     lastPointList.add(switch (expr) {
                         case MethodCallExpr methodCallExpr -> {
-                            List<MethodSignature> methodList = lastPoint.getMethodList(methodCallExpr.getNameAsString());
-                            if (methodList.isEmpty()) {
+                            MethodSignature methodSignature1 = resolveMethodSignature(lastPoint, methodCallExpr,
+                                compilationUnit);
+                            if (methodSignature1 == null) {
                                 yield null;
                             }
-                            MethodSignature methodSignature1 = methodList.getFirst();
                             methodSignature.set(methodSignature1);
                             yield methodSignature1.getReturnType();
                         }
-                        case FieldAccessExpr fieldAccessExpr ->
-                            lastPoint.getField(fieldAccessExpr.getNameAsString()).getType();
-                        case NameExpr nameExpr -> JavaUtil.resolvePointByName(getEditor().getIndex(),
-                            lastPoint, nameExpr.getNameAsString(), compilationUnit);
-                        default -> throw new RuntimeException();
+                        case FieldAccessExpr fieldAccessExpr -> {
+                            if (lastPoint == null) {
+                                yield null;
+                            }
+                            var field = lastPoint.getField(fieldAccessExpr.getNameAsString());
+                            yield field != null ? field.getType() : null;
+                        }
+                        case NameExpr nameExpr -> resolveExpressionType(nameExpr, compilationUnit);
+                        case ThisExpr ignored -> lastPoint != null ? lastPoint : indexPoint;
+                        case SuperExpr ignored -> lastPoint != null ? lastPoint.getParent() :
+                            indexPoint != null ? indexPoint.getParent() : null;
+                        case EnclosedExpr enclosedExpr ->
+                            resolveExpressionType(enclosedExpr.getInner(), compilationUnit);
+                        default -> resolveExpressionType(expr, compilationUnit);
                     });
                 }
                 super.visit(n, arg);
 
                 IndexPoint in = lastPointList.get(lastPointList.size() - 2);
                 source.set(in);
-                CompilationUnit unit = index.getCompilationUnit(in);
-                unit.getTypes().getFirst().ifPresent(type1 -> {
-                    // TODO: 同名不同参数的方法
-                    List<MethodDeclaration> methodList = type1.findAll(MethodDeclaration.class);
-                    if (!methodList.isEmpty()) {
-                        MethodDeclaration method = methodList.stream().filter(method1 ->
-                            n.getName().equals(method1.getName())).findFirst().orElseThrow();
-                        methodDeclaration.set(method);
-                    }
-                });
+                CompilationUnit unit = in != null ? index.getCompilationUnit(in) : null;
+                if (unit != null) {
+                    methodDeclaration.set(resolveMethodDeclaration(unit, n, compilationUnit));
+                }
             }
         }, null);
 
@@ -1208,6 +1355,46 @@ public class JavaFile extends FileEditor {
             return sb.toString();
         }
         return "";
+    }
+
+    private MethodDeclaration resolveMethodDeclaration(CompilationUnit sourceCompilationUnit,
+                                                       MethodCallExpr methodCallExpr,
+                                                       CompilationUnit currentCompilationUnit) {
+        List<MethodDeclaration> methodList = sourceCompilationUnit.findAll(MethodDeclaration.class).stream()
+            .filter(method -> method.getName().equals(methodCallExpr.getName()))
+            .toList();
+        if (methodList.isEmpty()) {
+            return null;
+        }
+        if (methodList.size() == 1) {
+            return methodList.getFirst();
+        }
+
+        List<IndexPoint> argumentTypeList = resolveArgumentTypes(methodCallExpr.getArguments(), currentCompilationUnit);
+        List<MethodDeclaration> sameParameterCountMethodList = methodList.stream()
+            .filter(method -> method.getParameters().size() == argumentTypeList.size())
+            .toList();
+        if (sameParameterCountMethodList.size() == 1) {
+            return sameParameterCountMethodList.getFirst();
+        }
+
+        MethodDeclaration bestMethod = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (MethodDeclaration declaration : sameParameterCountMethodList.isEmpty() ?
+            methodList : sameParameterCountMethodList) {
+            List<IndexPoint> parameterTypeList = declaration.getParameters().stream()
+                .map(parameter -> resolveType(parameter.getType().asString(), sourceCompilationUnit))
+                .toList();
+            int score = scoreMethodMatch(parameterTypeList, argumentTypeList);
+            if (score > bestScore) {
+                bestMethod = declaration;
+                bestScore = score;
+            }
+        }
+        if (bestScore >= 0) {
+            return bestMethod;
+        }
+        return sameParameterCountMethodList.isEmpty() ? methodList.getFirst() : sameParameterCountMethodList.getFirst();
     }
 
     private List<Expression> getScopeExpressionList(Expression expression) {
