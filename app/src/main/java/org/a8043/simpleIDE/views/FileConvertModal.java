@@ -14,6 +14,7 @@ import javafx.util.Callback;
 import lombok.SneakyThrows;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.fileConverters.JsonPropertiesConverter;
+import org.a8043.simpleIDE.fileConverters.PropertiesJsonConverter;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.util.Util;
 
@@ -41,6 +42,7 @@ public class FileConvertModal {
 
     static {
         register(new JsonPropertiesConverter());
+        register(new PropertiesJsonConverter());
     }
 
     public static void register(Converter converter) {

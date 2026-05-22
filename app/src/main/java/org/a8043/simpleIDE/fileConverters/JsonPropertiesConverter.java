@@ -82,22 +82,6 @@ public class JsonPropertiesConverter implements FileConvertModal.Converter {
         });
     }
 
-    private void flattenRootArray(String prefix, JSONArray array, Properties properties,
-                                  boolean hierarchical, String delimiter) {
-        for (int i = 0; i < array.size(); i++) {
-            Object value = array.get(i);
-            String arrayPrefix = prefix.isEmpty() ? String.valueOf(i) : prefix + delimiter + i;
-            if (value instanceof JSONObject json) {
-                convert(arrayPrefix, json, properties, hierarchical, delimiter);
-            } else if (value instanceof JSONArray array1) {
-                convert(arrayPrefix, array1, properties, hierarchical, delimiter);
-            } else {
-                String stringValue = value != null ? value.toString() : "";
-                properties.setProperty(arrayPrefix, stringValue);
-            }
-        }
-    }
-
     private void convert(String prefix, JSONArray array, Properties properties,
                          boolean hierarchical, String delimiter) {
         for (int i = 0; i < array.size(); i++) {
