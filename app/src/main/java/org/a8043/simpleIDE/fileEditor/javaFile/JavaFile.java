@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.fileEditor.javaFile;
 
 import cn.hutool.core.io.resource.ResourceUtil;
+import cn.hutool.core.util.ArrayUtil;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import lombok.AllArgsConstructor;
@@ -43,7 +44,7 @@ public class JavaFile extends FileEditor {
             FileUtil.findFileDirInFolders(editor.getProjectModel().getSrcDirList(), file.getName()), file);
         String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
         return JavaUtil.resolveModuleByPath(editor.getIndex(), path)
-            .getPackage(cn.hutool.core.util.ArrayUtil.sub(path, 0, path.length - 1))
+            .getPackage(ArrayUtil.sub(path, 0, path.length - 1))
             .getPoints().stream()
             .filter(point -> point.getName().equals(path[path.length - 1])).findFirst().orElse(null);
     }

@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.fileEditor.javaFile;
 
 import cn.hutool.core.collection.ListUtil;
+import cn.hutool.core.util.StrUtil;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParseStart;
@@ -21,6 +22,7 @@ import org.a8043.simpleIDE.util.JavaUtil;
 import org.a8043.simpleIDE.util.SearchUtil;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -214,7 +216,7 @@ public class JavaCompletionService {
     }
 
     private Expression findCompletionScopeExpression(CompilationUnit compilationUnit, int dotPosition) {
-        java.util.concurrent.atomic.AtomicReference<Expression> result = new java.util.concurrent.atomic.AtomicReference<>();
+        AtomicReference<Expression> result = new AtomicReference<>();
         compilationUnit.accept(new VoidVisitorAdapter<Void>() {
             @Override
             public void visit(FieldAccessExpr n, Void arg) {
@@ -462,13 +464,13 @@ public class JavaCompletionService {
             .filter(field -> !staticOnly || field.isStatic())
             .forEach(field -> memberList.add(new MemberCompletion(field.getName(),
                 new CompleteItem("field", field.getName(),
-                    field.getType() != null ? cn.hutool.core.util.StrUtil.join(".", (Object[]) field.getType().getPath()) : "void",
+                    field.getType() != null ? StrUtil.join(".", (Object[]) field.getType().getPath()) : "void",
                     caretPosition, start, field.getName()))));
         scopeType.getMethodList().stream()
             .filter(method -> !staticOnly || method.isStatic())
             .forEach(method -> memberList.add(new MemberCompletion(method.getName(),
                 new CompleteItem("method", method.getName(), method.getReturnType() != null ?
-                    cn.hutool.core.util.StrUtil.join(".", (Object[]) method.getReturnType().getPath()) : "void",
+                    StrUtil.join(".", (Object[]) method.getReturnType().getPath()) : "void",
                     caretPosition, start, method.getName()))));
 
         List<MemberCompletion> searchResult = SearchUtil.search(memberList, MemberCompletion::getKeyword, keyword);
@@ -510,7 +512,7 @@ public class JavaCompletionService {
 
     private boolean shouldAddImport(CompilationUnit compilationUnit, String importQualifiedName) {
         String simpleName = importQualifiedName.substring(importQualifiedName.lastIndexOf('.') + 1);
-        if (org.a8043.simpleIDE.util.JavaUtil.resolvePointByName(editor.getIndex(), state.getIndexPoint(), simpleName, compilationUnit) != null) {
+        if (JavaUtil.resolvePointByName(editor.getIndex(), state.getIndexPoint(), simpleName, compilationUnit) != null) {
             return false;
         }
         return compilationUnit.getImports().stream()

@@ -1,7 +1,10 @@
 package org.a8043.simpleIDE.fileEditor.javaFile;
 
+import cn.hutool.core.collection.ListUtil;
+import cn.hutool.core.util.StrUtil;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.expr.*;
 import org.a8043.simpleIDE.project.ProjectEditor;
@@ -128,7 +131,7 @@ public class JavaTypeResolver {
             .filter(declarator -> declarator.getName().getRange()
                                       .map(range -> JavaUtil.getPosition(range.begin, getContent()))
                                       .orElse(Integer.MAX_VALUE) <= currentPosition)
-            .max(java.util.Comparator.comparingInt(declarator -> declarator.getName().getRange()
+            .max(Comparator.comparingInt(declarator -> declarator.getName().getRange()
                 .map(range -> JavaUtil.getPosition(range.begin, getContent())).orElse(-1)))
             .orElse(null);
     }
@@ -244,7 +247,7 @@ public class JavaTypeResolver {
     }
 
     public List<Expression> getScopeExpressionList(Expression expression) {
-        return cn.hutool.core.collection.ListUtil.reverse(getScopeExpressionList0(new ArrayList<>(), expression));
+        return ListUtil.reverse(getScopeExpressionList0(new ArrayList<>(), expression));
     }
 
     private List<Expression> getScopeExpressionList0(List<Expression> list, Expression expression) {
@@ -268,7 +271,7 @@ public class JavaTypeResolver {
     }
 
     public String formatIndexPointPath(IndexPoint point) {
-        return point != null ? cn.hutool.core.util.StrUtil.join(".", (Object[]) point.getPath()) : "unknown";
+        return point != null ? StrUtil.join(".", (Object[]) point.getPath()) : "unknown";
     }
 
     private FieldSignature resolveFieldSignatureFromSource(IndexPoint owner, String fieldName) {
@@ -322,7 +325,7 @@ public class JavaTypeResolver {
         return bestScore >= 0 ? bestMethod : null;
     }
 
-    private List<IndexPoint> resolveArgumentTypes(com.github.javaparser.ast.NodeList<Expression> argumentList,
+    private List<IndexPoint> resolveArgumentTypes(NodeList<Expression> argumentList,
                                                   CompilationUnit compilationUnit) {
         return argumentList.stream().map(argument -> resolveExpressionType(argument, compilationUnit)).toList();
     }
@@ -390,8 +393,7 @@ public class JavaTypeResolver {
         }
         return switch (actualName) {
             case "byte" -> Set.of("short", "int", "long", "float", "double").contains(expectedName);
-            case "short" -> Set.of("int", "long", "float", "double").contains(expectedName);
-            case "char" -> Set.of("int", "long", "float", "double").contains(expectedName);
+            case "short", "char" -> Set.of("int", "long", "float", "double").contains(expectedName);
             case "int" -> Set.of("long", "float", "double").contains(expectedName);
             case "long" -> Set.of("float", "double").contains(expectedName);
             case "float" -> "double".equals(expectedName);

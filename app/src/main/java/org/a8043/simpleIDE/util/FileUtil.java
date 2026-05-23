@@ -11,10 +11,14 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import org.a8043.simpleIDE.resource.ResourceManager;
 
+import javax.swing.*;
 import javax.swing.filechooser.FileSystemView;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.WatchEvent;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -43,12 +47,12 @@ public class FileUtil {
             Image image = switch (suffix) {
                 case "java" -> ResourceManager.getImage("class");
                 case null, default -> {
-                    javax.swing.Icon icon = FileSystemView.getFileSystemView().getSystemIcon(file);
-                    java.awt.image.BufferedImage awtImage = new java.awt.image.BufferedImage(
+                    Icon icon = FileSystemView.getFileSystemView().getSystemIcon(file);
+                    BufferedImage awtImage = new BufferedImage(
                         icon.getIconWidth(),
                         icon.getIconHeight(),
-                        java.awt.image.BufferedImage.TYPE_INT_ARGB);
-                    java.awt.Graphics graphics = awtImage.getGraphics();
+                        BufferedImage.TYPE_INT_ARGB);
+                    Graphics graphics = awtImage.getGraphics();
                     icon.paintIcon(null, graphics, 0, 0);
                     graphics.dispose();
                     yield SwingFXUtils.toFXImage(awtImage, null);

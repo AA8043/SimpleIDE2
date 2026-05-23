@@ -12,6 +12,7 @@ import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.github.javaparser.javadoc.Javadoc;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.Access;
+import org.a8043.simpleIDE.project.index.FieldSignature;
 import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.MethodSignature;
 import org.a8043.simpleIDE.util.JavaUtil;
@@ -173,11 +174,11 @@ public class JavaHoverService {
         IndexPoint source = resolveCurrentTypePoint(compilationUnit, declaration);
         MethodSignature signature = new MethodSignature(
             declaration.getNameAsString(),
-            org.a8043.simpleIDE.project.index.Access.fromJavaParser(declaration.getAccessSpecifier()),
+            Access.fromJavaParser(declaration.getAccessSpecifier()),
             declaration.isStatic(),
             typeResolver.resolveType(declaration.getType().asString(), compilationUnit),
-            new java.util.LinkedHashMap<>(),
-            new java.util.ArrayList<>()
+            new LinkedHashMap<>(),
+            new ArrayList<>()
         );
         declaration.getParameters().forEach(parameter ->
             signature.getParameterMap().put(parameter.getNameAsString(),
@@ -384,7 +385,7 @@ public class JavaHoverService {
         return sb.toString();
     }
 
-    private String formatFieldHover(IndexPoint owner, org.a8043.simpleIDE.project.index.FieldSignature fieldSignature,
+    private String formatFieldHover(IndexPoint owner, FieldSignature fieldSignature,
                                     FieldDeclaration fieldDeclaration, VariableDeclarator fieldVariable) {
         StringBuilder sb = new StringBuilder();
         sb.append("### ").append(typeResolver.formatIndexPointPath(owner)).append("\n");
