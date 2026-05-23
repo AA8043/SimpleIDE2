@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.stmt.*;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.github.javaparser.javadoc.Javadoc;
@@ -49,7 +50,8 @@ public class JavaFile extends FileEditor {
     );
     private final List<ParseResult<CompilationUnit>> parseResultHistoryList = new FixedList<>(10);
     private final List<String> contentHistoryList = new FixedList<>(10);
-    private final List<CodeError> semanticErrorList = new ArrayList<>();
+    private final List<CodeError> problemList = new ArrayList<>();
+    private final List<SyntaxHighlight> problemHighlightList = new ArrayList<>();
     private List<TextEditSegment> pendingHighlightEdits;
     private String pendingHighlightContent;
     private IndexPoint indexPoint;
@@ -134,7 +136,8 @@ public class JavaFile extends FileEditor {
             .append(content.substring(caretPosition))
             .toString();
         List<TextEditSegment> editList = new ArrayList<>();
-        TextEditSegment completionEdit = new TextEditSegment(start, caretPosition, start, start + item.getText().length());
+        TextEditSegment completionEdit = new TextEditSegment(start, caretPosition,
+            start, start + item.getText().length());
         editList.add(completionEdit);
 
         String importQualifiedName = item.getImportQualifiedName();
@@ -206,7 +209,8 @@ public class JavaFile extends FileEditor {
         }
         String newContent = content.substring(0, insertPosition) + importText + content.substring(insertPosition);
         return new ImportInsertion(newContent,
-            new TextEditSegment(insertPosition, insertPosition, insertPosition, insertPosition + importText.length()));
+            new TextEditSegment(insertPosition, insertPosition,
+                insertPosition, insertPosition + importText.length()));
     }
 
     private CompletionContext createCompletionContext(int caretPosition) {
@@ -512,7 +516,8 @@ public class JavaFile extends FileEditor {
             String[] parts = trimmed.split("\\s+");
             if (parts.length >= 2) {
                 parameterList.add(new TextMember(parts[parts.length - 1],
-                    normalizeTypeName(String.join(" ", Arrays.copyOf(parts, parts.length - 1))), "variable"));
+                    normalizeTypeName(String.join(" ",
+                        Arrays.copyOf(parts, parts.length - 1))), "variable"));
             }
         }
         return parameterList;
@@ -666,7 +671,8 @@ public class JavaFile extends FileEditor {
         }
 
         if (indexPoint != null) {
-            IndexPoint currentFileFieldType = indexPoint.getField(name) != null ? indexPoint.getField(name).getType() : null;
+            IndexPoint currentFileFieldType = indexPoint.getField(name) != null ?
+                indexPoint.getField(name).getType() : null;
             if (currentFileFieldType != null) {
                 return currentFileFieldType;
             }
@@ -784,7 +790,8 @@ public class JavaFile extends FileEditor {
 
     private boolean isSameType(IndexPoint left, IndexPoint right) {
         return left == right || left != null && right != null &&
-                                Objects.equals(left.getPkg().getModule().getCacheName(), right.getPkg().getModule().getCacheName()) &&
+                                Objects.equals(left.getPkg().getModule().getCacheName(),
+                                    right.getPkg().getModule().getCacheName()) &&
                                 Arrays.equals(left.getPath(), right.getPath());
     }
 
@@ -817,6 +824,25 @@ public class JavaFile extends FileEditor {
             return null;
         }
         return WRAPPER_TO_PRIMITIVE.getOrDefault(type.getName(), type.getName());
+    }
+
+    private void addEmptyBodyWarning(Statement statement, String keyword) {
+        if (!isEmptyStatementBody(statement)) {
+            return;
+        }
+        Range range = statement.getRange().orElse(null);
+        if (range == null) {
+            return;
+        }
+        problemList.add(new CodeError(getPosition(range.begin, getContent()),
+            getPosition(range.end, getContent()) + 1,
+            ResourceManager.getText("warning.emptyStatementBody", keyword), CodeError.Type.WARNING));
+        problemHighlightList.add(new SyntaxHighlight(range, "warning"));
+    }
+
+    private boolean isEmptyStatementBody(Statement statement) {
+        return statement instanceof EmptyStmt ||
+               statement instanceof BlockStmt blockStmt && blockStmt.getStatements().isEmpty();
     }
 
     private void addMemberCompletionItems(List<CompleteItem> itemList, IndexPoint scopeType,
@@ -957,7 +983,9 @@ public class JavaFile extends FileEditor {
         parseResultHistoryList.add(parseResult);
         contentHistoryList.add(content);
         indexPoint = getEditor().getIndex().index(indexPoint.getPkg(), indexPoint.getName(), content);
-        semanticErrorList.clear();
+        problemList.clear();
+        problemHighlightList.clear();
+        collectSyntaxProblems(parseResult);
 
         CompilationUnit unit = parseResult.getResult().orElse(null);
         if (parseResult.isSuccessful()) {
@@ -976,9 +1004,10 @@ public class JavaFile extends FileEditor {
                     if (range != null) {
                         int start = getPosition(range.begin, getContent());
                         int end = getPosition(range.end, getContent()) + 1;
-                        semanticErrorList.add(new CodeError(start, end,
+                        problemList.add(new CodeError(start, end,
                             ResourceManager.getText("semanticError.duplicateModifiers", modifier.getKeyword()),
                             CodeError.Type.SEMANTIC_ERROR));
+                        problemHighlightList.add(new SyntaxHighlight(range, "problem"));
                     }
                 } else {
                     modifierSet.add(modifier.getKeyword());
@@ -992,6 +1021,23 @@ public class JavaFile extends FileEditor {
             duplicateModifiersErrorAdder.apply(type.getModifiers()));
         unit.findAll(FieldDeclaration.class).forEach(field ->
             duplicateModifiersErrorAdder.apply(field.getModifiers()));
+
+        unit.findAll(IfStmt.class).forEach(ifStmt -> {
+            addEmptyBodyWarning(ifStmt.getThenStmt(), "if");
+            ifStmt.getElseStmt().ifPresent(elseStmt -> {
+                if (!elseStmt.isIfStmt()) {
+                    addEmptyBodyWarning(elseStmt, "else");
+                }
+            });
+        });
+        unit.findAll(ForStmt.class).forEach(forStmt ->
+            addEmptyBodyWarning(forStmt.getBody(), "for"));
+        unit.findAll(ForEachStmt.class).forEach(forEachStmt ->
+            addEmptyBodyWarning(forEachStmt.getBody(), "for-each"));
+        unit.findAll(WhileStmt.class).forEach(whileStmt ->
+            addEmptyBodyWarning(whileStmt.getBody(), "while"));
+        unit.findAll(DoStmt.class).forEach(doStmt ->
+            addEmptyBodyWarning(doStmt.getBody(), "do-while"));
     }
 
     @Override
@@ -1013,18 +1059,21 @@ public class JavaFile extends FileEditor {
         HighlightSnapshot snapshot = getLatestSuccessfulHighlightSnapshot();
         if (snapshot != null) {
             List<SyntaxHighlight> highlightList = new ArrayList<>(collectSyntaxHighlights(snapshot.getCompilationUnit()));
-            highlightList.addAll(collectProblemHighlights(parseResult.getProblems()));
+            highlightList.addAll(problemHighlightList);
+            highlightList.addAll(collectSyntaxProblemHighlights(parseResult.getProblems()));
             if (pendingHighlightEdits != null && Objects.equals(pendingHighlightContent, content)) {
                 return createStyleSpans(content, highlightList, pendingHighlightEdits, snapshot.getContent());
             }
             return createStyleSpans(content, highlightList,
                 List.of(createTextEditSegment(createEditRange(snapshot.getContent(), content))), snapshot.getContent());
         }
-        return computeFail(parseResult.getProblems(), content);
+        return computeFail(parseResult.getProblems());
     }
 
-    private static StyleSpans<Collection<String>> computeSuccess(CompilationUnit cu, String text) {
-        return createStyleSpans(text, collectSyntaxHighlights(cu));
+    private StyleSpans<Collection<String>> computeSuccess(CompilationUnit cu, String text) {
+        List<SyntaxHighlight> highlightList = new ArrayList<>(collectSyntaxHighlights(cu));
+        highlightList.addAll(problemHighlightList);
+        return createStyleSpans(text, highlightList);
     }
 
     private static List<SyntaxHighlight> collectSyntaxHighlights(CompilationUnit cu) {
@@ -1092,15 +1141,15 @@ public class JavaFile extends FileEditor {
         return highlightList;
     }
 
-    private static List<SyntaxHighlight> collectProblemHighlights(List<Problem> problemList) {
+    private static List<SyntaxHighlight> collectSyntaxProblemHighlights(List<Problem> problemList) {
         List<SyntaxHighlight> highlightList = new ArrayList<>();
         problemList.forEach(problem -> problem.getLocation().ifPresent(problemLocation ->
             highlightList.add(new SyntaxHighlight(problemLocation.toRange().orElse(null), "problem", false))));
         return highlightList;
     }
 
-    private static StyleSpans<Collection<String>> computeFail(List<Problem> problemList, String text) {
-        return createStyleSpans(text, collectProblemHighlights(problemList));
+    private StyleSpans<Collection<String>> computeFail(List<Problem> problemList) {
+        return createStyleSpans(getContent(), collectSyntaxProblemHighlights(problemList));
     }
 
     private static StyleSpans<Collection<String>> createStyleSpans(String text, List<SyntaxHighlight> highlightList) {
@@ -1110,40 +1159,59 @@ public class JavaFile extends FileEditor {
     private static StyleSpans<Collection<String>> createStyleSpans(String text, List<SyntaxHighlight> highlightList,
                                                                    List<TextEditSegment> editList,
                                                                    String positionText) {
-        StyleSpansBuilder<Collection<String>> spansBuilder = new StyleSpansBuilder<>();
-        int lastPosition = 0;
+        List<ResolvedHighlight> resolvedHighlightList = new ArrayList<>();
+        NavigableSet<Integer> boundarySet = new TreeSet<>(Set.of(0, text.length()));
 
         for (SyntaxHighlight highlight : highlightList) {
-            if (highlight.range == null) {
+            ResolvedHighlight resolvedHighlight = resolveHighlight(text, highlight, editList, positionText);
+            if (resolvedHighlight == null) {
                 continue;
             }
-
-            Integer start = highlight.fromOldText ?
-                mapOldOffsetToNewOffset(getPosition(highlight.range.begin, positionText), editList) :
-                getPosition(highlight.range.begin, text);
-            Integer endExclusive = highlight.fromOldText ?
-                mapOldOffsetToNewOffset(getPosition(highlight.range.end, positionText) + 1, editList) :
-                getPosition(highlight.range.end, text) + 1;
-            if (start == null || endExclusive == null) {
-                continue;
-            }
-
-            start = Math.max(0, Math.min(start, text.length()));
-            endExclusive = Math.max(start, Math.min(endExclusive, text.length()));
-
-            if (start > lastPosition) {
-                spansBuilder.add(Collections.emptyList(), start - lastPosition);
-            }
-
-            spansBuilder.add(Collections.singleton(highlight.styleClass), endExclusive - start);
-            lastPosition = endExclusive;
+            resolvedHighlightList.add(resolvedHighlight);
+            boundarySet.add(resolvedHighlight.start());
+            boundarySet.add(resolvedHighlight.endExclusive());
         }
 
-        if (lastPosition < text.length()) {
-            spansBuilder.add(Collections.emptyList(), text.length() - lastPosition);
+        StyleSpansBuilder<Collection<String>> spansBuilder = new StyleSpansBuilder<>();
+        Integer start = boundarySet.pollFirst();
+        while (start != null && !boundarySet.isEmpty()) {
+            int endExclusive = boundarySet.first();
+            LinkedHashSet<String> styleSet = new LinkedHashSet<>();
+            for (ResolvedHighlight highlight : resolvedHighlightList) {
+                if (highlight.start() < endExclusive && start < highlight.endExclusive()) {
+                    styleSet.add(highlight.styleClass());
+                }
+            }
+            spansBuilder.add(styleSet.isEmpty() ? Collections.emptyList() : new ArrayList<>(styleSet),
+                endExclusive - start);
+            start = boundarySet.pollFirst();
         }
 
         return spansBuilder.create();
+    }
+
+    private static ResolvedHighlight resolveHighlight(String text, SyntaxHighlight highlight,
+                                                      List<TextEditSegment> editList, String positionText) {
+        if (highlight.range == null) {
+            return null;
+        }
+
+        Integer start = highlight.fromOldText ?
+            mapOldOffsetToNewOffset(getPosition(highlight.range.begin, positionText), editList) :
+            getPosition(highlight.range.begin, text);
+        Integer endExclusive = highlight.fromOldText ?
+            mapOldOffsetToNewOffset(getPosition(highlight.range.end, positionText) + 1, editList) :
+            getPosition(highlight.range.end, text) + 1;
+        if (start == null || endExclusive == null) {
+            return null;
+        }
+
+        start = Math.max(0, Math.min(start, text.length()));
+        endExclusive = Math.max(start, Math.min(endExclusive, text.length()));
+        if (start == endExclusive) {
+            return null;
+        }
+        return new ResolvedHighlight(start, endExclusive, highlight.styleClass);
     }
 
     private static Integer mapOldOffsetToNewOffset(int oldOffset, List<TextEditSegment> editList) {
@@ -1185,7 +1253,8 @@ public class JavaFile extends FileEditor {
 
         int oldSuffix = oldText.length();
         int newSuffix = newText.length();
-        while (oldSuffix > prefix && newSuffix > prefix && oldText.charAt(oldSuffix - 1) == newText.charAt(newSuffix - 1)) {
+        while (oldSuffix > prefix &&
+               newSuffix > prefix && oldText.charAt(oldSuffix - 1) == newText.charAt(newSuffix - 1)) {
             oldSuffix--;
             newSuffix--;
         }
@@ -1239,6 +1308,9 @@ public class JavaFile extends FileEditor {
     }
 
     private record HoverDoc(String description, Map<String, String> paramTagMap, Map<String, String> otherTagMap) {
+    }
+
+    private record ResolvedHighlight(int start, int endExclusive, String styleClass) {
     }
 
     private static class SyntaxHighlight {
@@ -1519,7 +1591,8 @@ public class JavaFile extends FileEditor {
     }
 
     private ClassOrInterfaceDeclaration resolveTypeDeclaration(IndexPoint typePoint) {
-        CompilationUnit sourceCompilationUnit = typePoint != null ? getEditor().getIndex().getCompilationUnit(typePoint) : null;
+        CompilationUnit sourceCompilationUnit = typePoint != null ?
+            getEditor().getIndex().getCompilationUnit(typePoint) : null;
         if (sourceCompilationUnit == null) {
             return null;
         }
@@ -1546,7 +1619,8 @@ public class JavaFile extends FileEditor {
                 .append(formatIndexPointPath(type)).append(" ").append(name).append(",\n"));
         }
         sb.append(")");
-        appendJavadocSection(sb, methodDeclaration != null ? methodDeclaration.getJavadoc().orElse(null) : null, true);
+        appendJavadocSection(sb, methodDeclaration != null ?
+            methodDeclaration.getJavadoc().orElse(null) : null, true);
         return sb.toString();
     }
 
@@ -1559,7 +1633,8 @@ public class JavaFile extends FileEditor {
         sb.append(fieldVariable != null ? normalizeTypeName(fieldVariable.getType().asString()) :
                 formatIndexPointPath(fieldSignature.getType()))
             .append(" ").append(fieldSignature.getName());
-        appendJavadocSection(sb, fieldDeclaration != null ? fieldDeclaration.getJavadoc().orElse(null) : null, false);
+        appendJavadocSection(sb, fieldDeclaration != null ?
+            fieldDeclaration.getJavadoc().orElse(null) : null, false);
         return sb.toString();
     }
 
@@ -1724,16 +1799,15 @@ public class JavaFile extends FileEditor {
 
     @Override
     public List<CodeError> getProblemList() {
-        ParseResult<CompilationUnit> parseResult = getLatestParseResult();
-        List<CodeError> errorList = new ArrayList<>();
-        if (!parseResult.isSuccessful()) {
-            parseResult.getProblems().forEach(problem -> problem.getLocation().ifPresent(problemLocation -> {
-                int start = getPosition(problemLocation.toRange().orElseThrow().begin, getContent());
-                int end = getPosition(problemLocation.toRange().orElseThrow().end, getContent()) + 1;
-                errorList.add(new CodeError(start, end, problem.getMessage(), CodeError.Type.SYNTAX_ERROR));
-            }));
-        }
-        return errorList;
+        return List.copyOf(problemList);
+    }
+
+    private void collectSyntaxProblems(ParseResult<CompilationUnit> parseResult) {
+        parseResult.getProblems().forEach(problem -> problem.getLocation().ifPresent(problemLocation -> {
+            int start = getPosition(problemLocation.toRange().orElseThrow().begin, getContent());
+            int end = getPosition(problemLocation.toRange().orElseThrow().end, getContent()) + 1;
+            problemList.add(new CodeError(start, end, problem.getMessage(), CodeError.Type.SYNTAX_ERROR));
+        }));
     }
 
     private boolean isInRange(int position, Range range) {

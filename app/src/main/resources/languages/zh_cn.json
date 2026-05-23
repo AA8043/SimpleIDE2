@@ -69,6 +69,7 @@
         "fileTab.failedToOpenFileTip": "打开文件失败, 以普通文本方式打开",
         "fileTab.failedToComputeHoverTip": "计算悬停信息失败",
         "semanticError.duplicateModifiers": "重复的修饰符: {}",
+        "warning.emptyStatementBody": "{} 语句体为空",
         "runnable.manager": "可运行管理",
         "runnable.debug": "调试",
         "runnable.java": "Java可运行",

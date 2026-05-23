@@ -10,6 +10,6 @@ public class CodeError {
     Type type;
 
     public enum Type {
-        SYNTAX_ERROR, SEMANTIC_ERROR
+        SYNTAX_ERROR, SEMANTIC_ERROR, WARNING
     }
 }

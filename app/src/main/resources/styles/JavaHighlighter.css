@@ -6,6 +6,12 @@
     -fx-fill: red;
 }
 
+.warning {
+    -rtfx-underline-color: rgb(240, 201, 74);
+    -rtfx-underline-width: 1.2;
+    -rtfx-underline-wave-radius: 2.0;
+}
+
 .class-name, .method-name {
     -fx-fill: rgb(86, 168, 245);
 }

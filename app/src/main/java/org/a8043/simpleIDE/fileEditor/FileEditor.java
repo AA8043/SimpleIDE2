@@ -6,7 +6,9 @@ import org.fxmisc.richtext.model.StyleSpan;
 import org.fxmisc.richtext.model.StyleSpans;
 import org.fxmisc.richtext.model.StyleSpansBuilder;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @Getter
@@ -47,11 +49,9 @@ public abstract class FileEditor {
         int lastPosition = 0;
         for (StyleSpan<Collection<String>> span : originalSpans) {
             int spanLength = span.getLength();
-            if (span.getStyle().isEmpty()) {
-                spansBuilder.add(defaultStyle, spanLength);
-            } else {
-                spansBuilder.add(span.getStyle(), spanLength);
-            }
+            LinkedHashSet<String> styleSet = new LinkedHashSet<>(defaultStyle);
+            styleSet.addAll(span.getStyle());
+            spansBuilder.add(new ArrayList<>(styleSet), spanLength);
             lastPosition += spanLength;
         }
         if (lastPosition < text.length()) {
