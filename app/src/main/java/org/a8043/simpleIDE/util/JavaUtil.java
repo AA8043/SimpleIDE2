@@ -1,10 +1,14 @@
 package org.a8043.simpleIDE.util;
 
 import cn.hutool.core.util.ArrayUtil;
+import com.github.javaparser.Position;
+import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import org.a8043.simpleIDE.project.ProjectModule;
 import org.a8043.simpleIDE.project.index.Index;
 import org.a8043.simpleIDE.project.index.IndexPoint;
@@ -12,6 +16,7 @@ import org.a8043.simpleIDE.project.index.Module;
 import org.a8043.simpleIDE.project.index.Package;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class JavaUtil {
@@ -163,5 +168,45 @@ public class JavaUtil {
         }
 
         return null;
+    }
+
+    public static int getPosition(Position pos, String text) {
+        String[] lines = text.split("\n", -1);
+        int position = 0;
+        for (int i = 0; i < pos.line - 1; i++) {
+            position += lines[i].length() + 1;
+        }
+        position += pos.column - 1;
+        return Math.min(position, text.length());
+    }
+
+    public static boolean isInRange(int position, Range range, String text) {
+        int start = getPosition(range.begin, text);
+        int end = getPosition(range.end, text) + 1;
+        return position >= start && position <= end;
+    }
+
+    public static boolean isPositionInString(CompilationUnit compilationUnit, int position, String content) {
+        AtomicBoolean result = new AtomicBoolean(false);
+        compilationUnit.accept(new VoidVisitorAdapter<Void>() {
+            @Override
+            public void visit(StringLiteralExpr n, Void arg) {
+                Range range = n.getRange().orElse(null);
+                if (range != null) {
+                    int start = getPosition(range.begin, content) + 1;
+                    int end = getPosition(range.end, content) - 1;
+                    if (position >= start && position <= end) {
+                        result.set(true);
+                        return;
+                    }
+                }
+                super.visit(n, arg);
+            }
+        }, null);
+        return result.get();
+    }
+
+    public static String normalizeTypeName(String typeName) {
+        return typeName.replace("final ", "").replace("...", "[]").trim();
     }
 }
