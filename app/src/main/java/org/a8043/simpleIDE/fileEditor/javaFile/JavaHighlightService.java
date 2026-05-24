@@ -6,12 +6,14 @@ import com.github.javaparser.Problem;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Modifier;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.PackageDeclaration;
+import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.comments.BlockComment;
+import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import org.a8043.simpleIDE.util.JavaUtil;
 import org.fxmisc.richtext.model.StyleSpans;
@@ -66,7 +68,28 @@ public class JavaHighlightService {
             }
 
             @Override
+            public void visit(EnumDeclaration n, Void arg) {
+                n.getName().getRange().ifPresent(range ->
+                    highlightList.add(new JavaSyntaxHighlight(range, "class-name")));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(RecordDeclaration n, Void arg) {
+                n.getName().getRange().ifPresent(range ->
+                    highlightList.add(new JavaSyntaxHighlight(range, "class-name")));
+                super.visit(n, arg);
+            }
+
+            @Override
             public void visit(MethodDeclaration n, Void arg) {
+                n.getName().getRange().ifPresent(range ->
+                    highlightList.add(new JavaSyntaxHighlight(range, "method-name")));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(ConstructorDeclaration n, Void arg) {
                 n.getName().getRange().ifPresent(range ->
                     highlightList.add(new JavaSyntaxHighlight(range, "method-name")));
                 super.visit(n, arg);
@@ -79,6 +102,48 @@ public class JavaHighlightService {
             }
 
             @Override
+            public void visit(BooleanLiteralExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "literal"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(CharLiteralExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "literal"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(DoubleLiteralExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "literal"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(IntegerLiteralExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "literal"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(LongLiteralExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "literal"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(NullLiteralExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "literal"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(JavadocComment n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "javadoc"));
+                super.visit(n, arg);
+            }
+
+            @Override
             public void visit(LineComment n, Void arg) {
                 highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "comment"));
                 super.visit(n, arg);
@@ -87,6 +152,30 @@ public class JavaHighlightService {
             @Override
             public void visit(BlockComment n, Void arg) {
                 highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "comment"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(MarkerAnnotationExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "annotation"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(NormalAnnotationExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "annotation"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(SingleMemberAnnotationExpr n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "annotation"));
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(PrimitiveType n, Void arg) {
+                highlightList.add(new JavaSyntaxHighlight(n.getRange().orElse(null), "var-type"));
                 super.visit(n, arg);
             }
 
@@ -112,6 +201,13 @@ public class JavaHighlightService {
                             highlightList.add(new JavaSyntaxHighlight(nextToken.getRange().orElse(null), "keyword")));
                     }
                 });
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(PackageDeclaration n, Void arg) {
+                n.getTokenRange().ifPresent(tokenRange ->
+                    highlightList.add(new JavaSyntaxHighlight(tokenRange.getBegin().getRange().orElse(null), "keyword")));
                 super.visit(n, arg);
             }
         }, null);

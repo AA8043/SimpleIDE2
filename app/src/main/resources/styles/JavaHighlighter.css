@@ -24,8 +24,20 @@
     -fx-fill: gray;
 }
 
+.javadoc {
+    -fx-fill: rgb(94, 113, 69);
+}
+
+.annotation {
+    -fx-fill: rgb(212, 172, 88);
+}
+
 .keyword {
     -fx-fill: rgb(206, 132, 77);
+}
+
+.literal {
+    -fx-fill: rgb(209, 154, 102);
 }
 
 .var-type {
