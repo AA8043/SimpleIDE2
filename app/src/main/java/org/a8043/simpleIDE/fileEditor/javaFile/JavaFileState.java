@@ -25,9 +25,19 @@ public class JavaFileState {
     private String pendingHighlightContent;
     @Setter
     private IndexPoint indexPoint;
+    private JavaHighlightSnapshot latestSuccessfulSnapshot;
 
     public JavaFileState(IndexPoint indexPoint) {
         this.indexPoint = indexPoint;
+    }
+
+    public void recordParseResult(ParseResult<CompilationUnit> parseResult, String content) {
+        parseResultHistoryList.add(parseResult);
+        contentHistoryList.add(content);
+        CompilationUnit compilationUnit = parseResult.getResult().orElse(null);
+        if (parseResult.isSuccessful() && compilationUnit != null) {
+            latestSuccessfulSnapshot = new JavaHighlightSnapshot(compilationUnit, content);
+        }
     }
 
     public ParseResult<CompilationUnit> getLatestParseResult() {
@@ -45,7 +55,8 @@ public class JavaFileState {
                 parseResult.ifSuccessful(result::set);
             }
         });
-        return result.get();
+        return result.get() != null ? result.get() :
+            latestSuccessfulSnapshot != null ? latestSuccessfulSnapshot.getCompilationUnit() : null;
     }
 
     public JavaHighlightSnapshot getLatestSuccessfulHighlightSnapshot() {
@@ -58,6 +69,6 @@ public class JavaFileState {
                 return new JavaHighlightSnapshot(compilationUnit, contentHistory.get(i));
             }
         }
-        return null;
+        return latestSuccessfulSnapshot;
     }
 }

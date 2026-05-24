@@ -11,13 +11,16 @@ import org.a8043.simpleIDE.fileEditor.CompleteItem;
 import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.fileEditor.FileEditor;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.ProjectModule;
 import org.a8043.simpleIDE.project.index.IndexPoint;
+import org.a8043.simpleIDE.project.index.Module;
 import org.a8043.simpleIDE.util.JavaUtil;
 import org.fxmisc.richtext.model.StyleSpans;
 
 import java.io.File;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 public class JavaFile extends FileEditor {
     public static final String STYLE = ResourceUtil.readUtf8Str("styles/JavaHighlighter.css");
@@ -35,7 +38,9 @@ public class JavaFile extends FileEditor {
         highlightService = new JavaHighlightService(state);
         completionService = new JavaCompletionService(editor, state, this::getContent, typeResolver);
         hoverService = new JavaHoverService(editor, state, this::getContent, () -> getFile().getFile(), typeResolver);
-        diagnosticService.analyze(getContent());
+        if (diagnosticService.analyze(getContent())) {
+            synchronizeIndexPoint();
+        }
     }
 
     private static IndexPoint resolveIndexPoint(ControllableFile file, ProjectEditor editor) {
@@ -59,7 +64,7 @@ public class JavaFile extends FileEditor {
 
         String moduleCacheName = resolveSourceCacheModuleName(sourceFile, editor);
         if (moduleCacheName != null) {
-            org.a8043.simpleIDE.project.index.Module sourceModule =
+            Module sourceModule =
                 editor.getIndex().getModuleByCacheName(moduleCacheName);
             if (sourceModule != null) {
                 IndexPoint point = sourceModule.getPoint(path);
@@ -69,7 +74,7 @@ public class JavaFile extends FileEditor {
             }
         }
 
-        org.a8043.simpleIDE.project.index.Module module = JavaUtil.resolveModuleByPath(editor.getIndex(), path);
+        Module module = JavaUtil.resolveModuleByPath(editor.getIndex(), path);
         return module != null ? module.getPoint(path) : null;
     }
 
@@ -92,18 +97,6 @@ public class JavaFile extends FileEditor {
         }
     }
 
-    public ParseResult<CompilationUnit> getLatestParseResult() {
-        return state.getLatestParseResult();
-    }
-
-    public CompilationUnit getLatestCompilationUnit() {
-        return state.getLatestCompilationUnit();
-    }
-
-    public CompilationUnit getLatestSuccessfulCompilationUnit() {
-        return state.getLatestSuccessfulCompilationUnit();
-    }
-
     @Override
     public List<CompleteItem> computeCompletion(int caretPosition) {
         return completionService.computeCompletion(caretPosition);
@@ -115,7 +108,80 @@ public class JavaFile extends FileEditor {
 
     @Override
     protected void onContentChanged() {
-        diagnosticService.analyze(getContent());
+        if (diagnosticService.analyze(getContent())) {
+            synchronizeIndexPoint();
+        }
+    }
+
+    private void synchronizeIndexPoint() {
+        CompilationUnit compilationUnit = state.getLatestCompilationUnit();
+        if (compilationUnit == null) {
+            return;
+        }
+
+        IndexTarget target = resolveIndexTarget(getFile().getFile(), getEditor(), compilationUnit);
+        if (target == null || target.module() == null) {
+            return;
+        }
+
+        IndexPoint currentPoint = state.getIndexPoint();
+        if (currentPoint != null && !isSameTarget(currentPoint, target)) {
+            getEditor().getIndex().getIndexList().remove(currentPoint);
+        }
+        state.setIndexPoint(getEditor().getIndex().index(target.module(), target.path(), getContent()));
+    }
+
+    private static IndexTarget resolveIndexTarget(File sourceFile, ProjectEditor editor, CompilationUnit compilationUnit) {
+        if (sourceFile == null || compilationUnit.getTypes().isEmpty()) {
+            return null;
+        }
+
+        String typeName = compilationUnit.getPrimaryTypeName().orElse(compilationUnit.getType(0).getNameAsString());
+        String[] packagePath = compilationUnit.getPackageDeclaration()
+            .map(declaration -> declaration.getNameAsString().split("\\."))
+            .orElse(new String[0]);
+        String[] path = ArrayUtil.addAll(packagePath, new String[]{typeName});
+
+        String moduleCacheName = resolveSourceCacheModuleName(sourceFile, editor);
+        if (moduleCacheName != null) {
+            Module sourceModule = editor.getIndex().getModuleByCacheName(moduleCacheName);
+            if (sourceModule != null) {
+                return new IndexTarget(sourceModule, path);
+            }
+        }
+
+        Module module = resolveProjectModule(sourceFile, editor);
+        if (module != null) {
+            return new IndexTarget(module, path);
+        }
+
+        module = JavaUtil.resolveModuleByPath(editor.getIndex(), path);
+        return module != null ? new IndexTarget(module, path) : null;
+    }
+
+    private static Module resolveProjectModule(File sourceFile, ProjectEditor editor) {
+        try {
+            File canonicalSourceFile = sourceFile.getCanonicalFile();
+            for (ProjectModule projectModule : editor.getProjectModel().getModuleList()) {
+                if (projectModule.getLocation() != ProjectModule.Location.PROJECT) {
+                    continue;
+                }
+                for (File srcDir : projectModule.getSrcDirList()) {
+                    File canonicalSrcDir = srcDir.getCanonicalFile();
+                    if (canonicalSourceFile.toPath().startsWith(canonicalSrcDir.toPath())) {
+                        return editor.getIndex().getModule(projectModule.getName());
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static boolean isSameTarget(IndexPoint indexPoint, IndexTarget target) {
+        return indexPoint.getPkg() != null &&
+               indexPoint.getPkg().getModule() == target.module() &&
+               Objects.deepEquals(indexPoint.getPath(), target.path());
     }
 
     @Override
@@ -154,5 +220,8 @@ public class JavaFile extends FileEditor {
     public static class SourceLocation {
         private final File file;
         private final int position;
+    }
+
+    private record IndexTarget(Module module, String[] path) {
     }
 }

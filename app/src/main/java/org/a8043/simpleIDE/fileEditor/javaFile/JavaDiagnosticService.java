@@ -27,14 +27,9 @@ public class JavaDiagnosticService {
         this.state = state;
     }
 
-    public void analyze(String content) {
+    public boolean analyze(String content) {
         ParseResult<CompilationUnit> parseResult = editor.getJavaParser().parse(content);
-        state.getParseResultHistoryList().add(parseResult);
-        state.getContentHistoryList().add(content);
-        if (state.getIndexPoint() != null) {
-            state.setIndexPoint(editor.getIndex().index(state.getIndexPoint().getPkg(),
-                state.getIndexPoint().getName(), content));
-        }
+        state.recordParseResult(parseResult, content);
         state.getProblemList().clear();
         state.getProblemHighlightList().clear();
         collectSyntaxProblems(parseResult, content);
@@ -45,7 +40,7 @@ public class JavaDiagnosticService {
             state.setPendingHighlightContent(null);
         }
         if (unit == null) {
-            return;
+            return false;
         }
 
         Function<List<Modifier>, Void> duplicateModifiersErrorAdder = list -> {
@@ -90,6 +85,8 @@ public class JavaDiagnosticService {
             addEmptyBodyWarning(whileStmt.getBody(), "while", content));
         unit.findAll(DoStmt.class).forEach(doStmt ->
             addEmptyBodyWarning(doStmt.getBody(), "do-while", content));
+
+        return true;
     }
 
     private void addEmptyBodyWarning(Statement statement, String keyword, String content) {

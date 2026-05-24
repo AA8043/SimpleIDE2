@@ -224,6 +224,7 @@ public class Index extends JSONSupport implements Closeable {
     }
 
     public IndexPoint index(Module module, String[] path, String content) {
+        indexList.removeIf(point -> point.getPkg().getModule() == module && ArrayUtil.equals(point.getPath(), path));
         List<MethodIndexTemp> methodTempList = new ArrayList<>();
         List<FieldIndexTemp> fieldTempList = new ArrayList<>();
         indexOne(module, path, content, methodTempList, fieldTempList);
