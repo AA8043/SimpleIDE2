@@ -20,6 +20,7 @@ plugins {
     `maven-publish`
     id("org.openjfx.javafxplugin") version "0.1.0"
     id("io.franzbecker.gradle-lombok") version "3.0.0"
+    id("com.github.jk1.dependency-license-report") version "2.5"
 }
 
 publishing {
@@ -178,4 +179,10 @@ tasks.register("generateFiles") {
 tasks.named<ProcessResources>("processResources") {
     sourceSets.main.get().resources.srcDir(generatedResourcesDir)
     dependsOn("generateFiles")
+}
+
+tasks.jar {
+    from("build/reports/dependency-license") {
+        into("META-INF/dependency-license")
+    }
 }

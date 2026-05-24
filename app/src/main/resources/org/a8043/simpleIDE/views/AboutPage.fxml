@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+<?import javafx.scene.web.WebView?>
+<ScrollPane fx:id="pane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308"
+            xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="org.a8043.simpleIDE.views.AboutPage">
+    <content>
+        <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308">
+            <children>
+                <HBox>
+                    <VBox.margin>
+                        <Insets bottom="32.0" left="16.0" right="16.0" top="16.0"/>
+                    </VBox.margin>
+                    <children>
+                        <ImageView fx:id="iconView" fitHeight="128.0" fitWidth="128.0" pickOnBounds="true"
+                                   preserveRatio="true">
+                            <HBox.margin>
+                                <Insets right="10.0"/>
+                            </HBox.margin>
+                        </ImageView>
+                        <VBox>
+                            <children>
+                                <Label text="SimpleIDE">
+                                    <VBox.margin>
+                                        <Insets bottom="20.0"/>
+                                    </VBox.margin>
+                                    <font>
+                                        <Font size="30.0"/>
+                                    </font>
+                                </Label>
+                                <Label fx:id="versionLabel">
+                                    <font>
+                                        <Font size="20.0"/>
+                                    </font>
+                                </Label>
+                            </children>
+                        </VBox>
+                    </children>
+                </HBox>
+                <WebView fx:id="dependencyLicenseView" minHeight="-Infinity" minWidth="-Infinity" prefHeight="-1.0"
+                         prefWidth="-1.0"/>
+            </children>
+        </VBox>
+    </content>
+</ScrollPane>

@@ -209,7 +209,11 @@ public class Main extends Application {
         ResourceManager.loadAllImage();
 
         stepTipSetter.apply("正在加载本地库...");
-        System.loadLibrary("native");
+        try {
+            System.loadLibrary("native");
+        } catch (UnsatisfiedLinkError e) {
+            log.error(e.getMessage(), e);
+        }
 
         stepTipSetter.apply("正在加载插件...");
         PluginManager.loadAll();

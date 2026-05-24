@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.resource.ResourceManager;
+import org.a8043.simpleIDE.util.BeanMap;
 import org.a8043.simpleIDE.util.Util;
 
 import java.io.File;
@@ -45,6 +46,12 @@ public class SettingsModal {
     static {
         registerItemStyle("buildTool.maven.defaultPath", item -> new FileItem(item, false));
         registerItemStyle("buildTool.gradle.defaultPath", item -> new FileItem(item, false));
+        registerOnShowListener(modal -> {
+            if (modal.settings instanceof BeanMap beanMap && beanMap.getBean().equals(Main.instance.getSettings())) {
+                modal.root.getChildren().add(new TreeItem<>(new Folder("about", null)));
+            }
+        });
+        registerFolderStyle("about", folder -> new AboutPage().getPane());
     }
 
     public static void registerFolderStyle(String name, FolderStyleFactory contentSupplier) {
@@ -74,8 +81,6 @@ public class SettingsModal {
     @SneakyThrows
     @FXML
     private void initialize() {
-        ON_SHOW_LISTENER_LIST.forEach(listener -> listener.onShow(this));
-
         folderTree.setRoot(root);
         folderTree.setShowRoot(false);
         folderTree.setCellFactory(Util.createTreeCell(folder ->
@@ -95,6 +100,8 @@ public class SettingsModal {
             Item item = new Item(path[path.length - 1], v);
             folder.getItemList().add(item);
         });
+
+        ON_SHOW_LISTENER_LIST.forEach(listener -> listener.onShow(this));
     }
 
     private Folder getOrCreateFolder(String[] path) {
@@ -116,7 +123,7 @@ public class SettingsModal {
 
     @AllArgsConstructor
     @Getter
-    public class Folder {
+    public static class Folder {
         private final String name;
         private final Folder parent;
         private final List<Item> itemList = new ArrayList<>();
@@ -128,7 +135,7 @@ public class SettingsModal {
             return parent.getPath() + "." + name;
         }
 
-        public List<Folder> getChildren() {
+        public List<Folder> getChildren(TreeItem<Folder> root) {
             return getTreeChildren(root).stream()
                 .filter(child -> child.getValue() != null && child.getValue().parent == this)
                 .map(TreeItem::getValue).toList();
@@ -179,7 +186,7 @@ public class SettingsModal {
 
     private class FolderBox extends VBox {
         public FolderBox(Folder folder) {
-            List<Folder> folderChildren = folder.getChildren();
+            List<Folder> folderChildren = folder.getChildren(root);
             setPadding(new Insets(20));
             getChildren().addFirst(new VBox(new Label(ResourceManager.getText("settings." + folder.getPath())) {{
                 setFont(new Font(18));
