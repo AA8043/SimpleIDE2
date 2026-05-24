@@ -120,6 +120,33 @@ public class JavaUtil {
         return null;
     }
 
+    public static IndexPoint resolveType(Index index, IndexPoint source, String typeName, CompilationUnit unit) {
+        if (index == null || typeName == null || typeName.isBlank()) {
+            return null;
+        }
+
+        String normalizedTypeName = normalizeTypeName(typeName);
+        int arrayDepth = countArrayDimensions(normalizedTypeName);
+        String componentTypeName = stripArraySuffix(normalizedTypeName);
+        componentTypeName = eraseTypeArguments(componentTypeName).trim();
+        if (componentTypeName.startsWith("? extends ")) {
+            componentTypeName = componentTypeName.substring("? extends ".length()).trim();
+        } else if (componentTypeName.startsWith("? super ")) {
+            componentTypeName = componentTypeName.substring("? super ".length()).trim();
+        } else if ("?".equals(componentTypeName)) {
+            componentTypeName = "Object";
+        }
+
+        IndexPoint componentType = resolveDeclaredType(index, source, componentTypeName, unit);
+        if (componentType == null) {
+            return null;
+        }
+        for (int i = 0; i < arrayDepth; i++) {
+            componentType = index.getOrCreateArrayType(componentType);
+        }
+        return componentType;
+    }
+
     public static IndexPoint resolvePointByPath(Index index, Module source, String[] path) {
         IndexPoint pointInSelf = source.getPoint(path);
         if (pointInSelf != null) {
@@ -208,5 +235,63 @@ public class JavaUtil {
 
     public static String normalizeTypeName(String typeName) {
         return typeName.replace("final ", "").replace("...", "[]").trim();
+    }
+
+    public static int countArrayDimensions(String typeName) {
+        String normalizedTypeName = normalizeTypeName(typeName);
+        int count = 0;
+        while (normalizedTypeName.endsWith("[]")) {
+            count++;
+            normalizedTypeName = normalizedTypeName.substring(0, normalizedTypeName.length() - 2).trim();
+        }
+        return count;
+    }
+
+    public static String stripArraySuffix(String typeName) {
+        String normalizedTypeName = normalizeTypeName(typeName);
+        while (normalizedTypeName.endsWith("[]")) {
+            normalizedTypeName = normalizedTypeName.substring(0, normalizedTypeName.length() - 2).trim();
+        }
+        return normalizedTypeName;
+    }
+
+    public static String eraseTypeArguments(String typeName) {
+        StringBuilder builder = new StringBuilder();
+        int depth = 0;
+        for (int i = 0; i < typeName.length(); i++) {
+            char ch = typeName.charAt(i);
+            if (ch == '<') {
+                depth++;
+                continue;
+            }
+            if (ch == '>') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth == 0) {
+                builder.append(ch);
+            }
+        }
+        return builder.toString();
+    }
+
+    private static IndexPoint resolveDeclaredType(Index index, IndexPoint source, String typeName, CompilationUnit unit) {
+        if (typeName.contains(".")) {
+            String[] path = typeName.split("\\.");
+            if (source != null && source.getPkg() != null && source.getPkg().getModule() != null) {
+                IndexPoint point = resolvePointByPath(index, source.getPkg().getModule(), path);
+                if (point != null) {
+                    return point;
+                }
+            }
+            Module module = resolveModuleByPath(index, path);
+            if (module != null) {
+                IndexPoint point = module.getPoint(path);
+                if (point != null) {
+                    return point;
+                }
+            }
+        }
+        return resolvePointByName(index, source, typeName, unit);
     }
 }

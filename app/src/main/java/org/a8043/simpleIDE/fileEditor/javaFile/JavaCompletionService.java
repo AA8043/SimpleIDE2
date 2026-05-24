@@ -209,7 +209,7 @@ public class JavaCompletionService {
         if (state.getIndexPoint() != null) {
             var field = state.getIndexPoint().getField(name);
             if (field != null && field.getType() != null) {
-                return new TextMember(field.getName(), field.getType().getName(), "field");
+                return new TextMember(field.getName(), typeResolver.formatIndexPointPath(field.getType()), "field");
             }
         }
         return null;

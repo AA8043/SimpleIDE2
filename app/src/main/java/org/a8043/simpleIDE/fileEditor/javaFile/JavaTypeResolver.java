@@ -63,6 +63,12 @@ public class JavaTypeResolver {
             case CastExpr castExpr -> resolveType(castExpr.getType().asString(), compilationUnit);
             case ObjectCreationExpr objectCreationExpr ->
                 resolveType(objectCreationExpr.getType().asString(), compilationUnit);
+            case ArrayCreationExpr arrayCreationExpr -> resolveType(arrayCreationExpr.getElementType().asString() +
+                                                                    "[]".repeat(arrayCreationExpr.getLevels().size()), compilationUnit);
+            case ArrayAccessExpr arrayAccessExpr -> {
+                IndexPoint arrayType = resolveExpressionType(arrayAccessExpr.getName(), compilationUnit);
+                yield editor.getIndex().getArrayComponentType(arrayType);
+            }
             case StringLiteralExpr ignored -> resolveType("String", compilationUnit);
             case IntegerLiteralExpr ignored -> resolveType("int", compilationUnit);
             case LongLiteralExpr ignored -> resolveType("long", compilationUnit);
@@ -137,8 +143,7 @@ public class JavaTypeResolver {
     }
 
     public IndexPoint resolveType(String typeName, CompilationUnit compilationUnit) {
-        String normalizedTypeName = typeName.replace("[]", "");
-        return JavaUtil.resolvePointByName(editor.getIndex(), state.getIndexPoint(), normalizedTypeName, compilationUnit);
+        return JavaUtil.resolveType(editor.getIndex(), state.getIndexPoint(), typeName, compilationUnit);
     }
 
     public MethodSignature resolveMethodSignature(IndexPoint scopeType, MethodCallExpr methodCallExpr,
@@ -293,8 +298,8 @@ public class JavaTypeResolver {
         if (fieldDeclaration == null) {
             return null;
         }
-        IndexPoint fieldType = JavaUtil.resolvePointByName(editor.getIndex(), owner,
-            variable.getType().asString().replace("[]", ""), sourceCompilationUnit);
+        IndexPoint fieldType = JavaUtil.resolveType(editor.getIndex(), owner,
+            variable.getType().asString(), sourceCompilationUnit);
         return new FieldSignature(fieldName, Access.fromJavaParser(fieldDeclaration.getAccessSpecifier()),
             fieldDeclaration.isStatic(), fieldType);
     }

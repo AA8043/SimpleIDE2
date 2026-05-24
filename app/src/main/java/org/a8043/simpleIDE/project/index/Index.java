@@ -48,6 +48,8 @@ public class Index extends JSONSupport implements Closeable {
     private final Map<Dependency, ZipFile> dependencyZipMap = new HashMap<>();
     @Getter
     private final Map<String, IndexPoint> basicTypeMap;
+    private final Map<String, IndexPoint> arrayTypeMap = new HashMap<>();
+    private final Map<IndexPoint, IndexPoint> arrayComponentTypeMap = new IdentityHashMap<>();
 
     public Index(ProjectEditor editor) {
         this.editor = editor;
@@ -75,6 +77,62 @@ public class Index extends JSONSupport implements Closeable {
     public Module getModuleByCacheName(String name) {
         return moduleList.stream().filter(m -> Objects.equals(m.getCacheName(), name))
             .findFirst().orElse(null);
+    }
+
+    public synchronized IndexPoint getOrCreateArrayType(IndexPoint componentType) {
+        if (componentType == null) {
+            return null;
+        }
+        String key = buildArrayTypeKey(componentType);
+        IndexPoint cached = arrayTypeMap.get(key);
+        if (cached != null) {
+            return cached;
+        }
+
+        IndexPoint arrayType = new IndexPoint(componentType.getName() + "[]", componentType.getPkg(),
+            resolveJavaLangObjectType(), this);
+        arrayType.getFieldList().add(new FieldSignature("length", Access.PUBLIC, false, basicTypeMap.get("int")));
+        arrayTypeMap.put(key, arrayType);
+        arrayComponentTypeMap.put(arrayType, componentType);
+        return arrayType;
+    }
+
+    public boolean isArrayType(IndexPoint type) {
+        return arrayComponentTypeMap.containsKey(type);
+    }
+
+    public IndexPoint getArrayComponentType(IndexPoint arrayType) {
+        return arrayComponentTypeMap.get(arrayType);
+    }
+
+    public IndexPoint resolveSerializedType(String moduleName, String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+
+        int arrayDepth = JavaUtil.countArrayDimensions(path);
+        String componentPath = JavaUtil.stripArraySuffix(path);
+        Module module = getModuleByCacheName(moduleName);
+        IndexPoint componentType = null;
+        if (module != null) {
+            componentType = module.getPoint(componentPath.split("\\."));
+        }
+        if (componentType == null) {
+            componentType = basicTypeMap.get(componentPath);
+        }
+        if (componentType == null) {
+            Module fallbackModule = JavaUtil.resolveModuleByPath(this, componentPath.split("\\."));
+            if (fallbackModule != null) {
+                componentType = fallbackModule.getPoint(componentPath.split("\\."));
+            }
+        }
+        if (componentType == null) {
+            return null;
+        }
+        for (int i = 0; i < arrayDepth; i++) {
+            componentType = getOrCreateArrayType(componentType);
+        }
+        return componentType;
     }
 
     public CompilationUnit getCompilationUnit(IndexPoint point) {
@@ -141,19 +199,14 @@ public class Index extends JSONSupport implements Closeable {
                 Map<String, IncompleteType> parameterMap = new LinkedHashMap<>();
                 method.getParameters().forEach(parameter -> parameterMap.put(parameter.getNameAsString(),
                     createIncompleteType(point, unit, parameter.getType().asString())));
-                String typeString = method.getType().asString();
                 methodTempList.add(new MethodIndexTemp(point, method.getNameAsString(),
                     Access.fromJavaParser(method.getAccessSpecifier()), method.isStatic(),
-                    createIncompleteType(point, unit, switch (typeString.charAt(typeString.length() - 1)) {
-                        case ']' -> typeString.substring(0, typeString.length() - 2);
-                        case '.' -> typeString.substring(0, typeString.length() - 3);
-                        default -> typeString;
-                    }), parameterMap));
+                    createIncompleteType(point, unit, method.getType().asString()), parameterMap));
             });
             type.getFields().forEach(field -> field.getVariables().forEach(variable ->
                 fieldTempList.add(new FieldIndexTemp(point, variable.getNameAsString(),
                     Access.fromJavaParser(field.getAccessSpecifier()), field.isStatic(),
-                    createIncompleteType(point, unit, field.getElementType().asString())))));
+                    createIncompleteType(point, unit, variable.getType().asString())))));
         }), () -> indexList.add(old));
     }
 
@@ -340,13 +393,13 @@ public class Index extends JSONSupport implements Closeable {
     @Setter
     private class IncompleteType {
         private final IndexPoint source;
-        private final String[] path;
+        private final String typeName;
         private final CompilationUnit unit;
         private IndexPoint point;
 
-        private IncompleteType(IndexPoint source, String[] path, CompilationUnit unit) {
+        private IncompleteType(IndexPoint source, String typeName, CompilationUnit unit) {
             this.source = source;
-            this.path = path;
+            this.typeName = typeName;
             this.unit = unit;
         }
 
@@ -354,13 +407,12 @@ public class Index extends JSONSupport implements Closeable {
             if (point != null) {
                 return point;
             }
-            return JavaUtil.resolvePointByName(Index.this, source,
-                StrUtil.join(".", (Object[]) path), unit);
+            return point = JavaUtil.resolveType(Index.this, source, typeName, unit);
         }
     }
 
     private IncompleteType createIncompleteType(IndexPoint source, CompilationUnit unit, String original) {
-        return new IncompleteType(source, original.split("\\."), unit);
+        return new IncompleteType(source, original, unit);
     }
 
     @Override
@@ -437,8 +489,8 @@ public class Index extends JSONSupport implements Closeable {
                     if (typeJson.isEmpty()) {
                         return;
                     }
-                    parameterMap.put(paramName, getModuleByCacheName(typeJson.getStr("moduleName"))
-                        .getPoint(typeJson.getStr("path").split("\\.")));
+                    parameterMap.put(paramName,
+                        resolveSerializedType(typeJson.getStr("moduleName"), typeJson.getStr("path")));
                 });
                 JSONObject returnTypeJson = methodJson.getJSONObject("returnType");
                 if (returnTypeJson.isEmpty()) {
@@ -452,16 +504,15 @@ public class Index extends JSONSupport implements Closeable {
                             parameterTypeList.add(null);
                             return;
                         }
-                        parameterTypeList.add(getModuleByCacheName(typeJson.getStr("moduleName"))
-                            .getPoint(typeJson.getStr("path").split("\\.")));
+                        parameterTypeList.add(
+                            resolveSerializedType(typeJson.getStr("moduleName"), typeJson.getStr("path")));
                     });
                 } else {
                     parameterTypeList.addAll(parameterMap.values());
                 }
                 point.getMethodList().add(new MethodSignature(methodJson.getStr("name"),
                     Access.valueOf(methodJson.getStr("access")), methodJson.getBool("isStatic"),
-                    getModuleByCacheName(returnTypeJson.getStr("moduleName"))
-                        .getPoint(returnTypeJson.getStr("path").split("\\.")),
+                    resolveSerializedType(returnTypeJson.getStr("moduleName"), returnTypeJson.getStr("path")),
                     parameterMap, parameterTypeList));
             });
             indexJson.getJSONArray("fieldList").forEach(fieldJsonObject -> {
@@ -474,8 +525,7 @@ public class Index extends JSONSupport implements Closeable {
                 point.getFieldList().add(new FieldSignature(fieldJson.getStr("name"),
                     Access.valueOf(fieldJson.getStr("access")),
                     fieldJson.getBool("isStatic"),
-                    getModuleByCacheName(typeJson.getStr("moduleName"))
-                        .getPoint(typeJson.getStr("path").split("\\."))));
+                    resolveSerializedType(typeJson.getStr("moduleName"), typeJson.getStr("path"))));
             });
         });
         pointParentJsonMap.forEach((point, parentName) -> {
@@ -488,5 +538,15 @@ public class Index extends JSONSupport implements Closeable {
         });
 
         getStandardLibraryZip();
+    }
+
+    private String buildArrayTypeKey(IndexPoint componentType) {
+        return componentType.getPkg().getModule().getCacheName() + ":" +
+               StrUtil.join(".", (Object[]) componentType.getPath()) + "[]";
+    }
+
+    private IndexPoint resolveJavaLangObjectType() {
+        Module javaBase = getModule("java.base");
+        return javaBase != null ? javaBase.getPoint(new String[]{"java", "lang", "Object"}) : null;
     }
 }

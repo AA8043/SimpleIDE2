@@ -422,7 +422,8 @@ public class JavaHoverService {
                 .append(declaration.getNameAsString());
             appendJavadocSection(sb, declaration.getJavadoc().orElse(null), false);
         } else {
-            sb.append("class ").append(typePoint.getName());
+            sb.append(editor.getIndex().isArrayType(typePoint) ? "array " : "class ")
+                .append(typeResolver.formatIndexPointPath(typePoint));
         }
         return sb.toString();
     }
