@@ -13,6 +13,7 @@ import java.io.File;
 public class ControllableFile {
     private File file;
     private String content;
+    private boolean readOnly;
 
     public String read() {
         if (file != null) {
@@ -22,7 +23,7 @@ public class ControllableFile {
     }
 
     public void write() {
-        if (file != null) {
+        if (file != null && !readOnly) {
             FileUtil.writeUtf8String(content, file);
         }
     }

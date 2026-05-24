@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class ProjectView {
     public static final URL FXML_URL = ResourceUtil.getResource("ProjectView.fxml", ProjectView.class);
+    private static volatile ProjectView CURRENT;
     private static final List<FileMenuItemFactory> FILE_MENU_ITEM_LIST = new ArrayList<>();
 
     public interface FileMenuItemFactory {
@@ -88,6 +89,11 @@ public class ProjectView {
 
     public ProjectView(ProjectEditor editor) {
         this.editor = editor;
+        CURRENT = this;
+    }
+
+    public static ProjectView getCurrent() {
+        return CURRENT;
     }
 
     @FXML
@@ -260,6 +266,23 @@ public class ProjectView {
         TreeItem<File> root = new TreeItem<>(projectDir);
         addFileToTreeItem(projectDir, root);
         fileTreeView.setRoot(root);
+    }
+
+    public void openFile(File file, int caretPosition) {
+        if (file == null) {
+            return;
+        }
+        Tab tab = editorTabPane.getTabs().stream()
+            .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab && file.equals(fileTab.getFile()))
+            .findFirst().orElseGet(() -> {
+                Tab newTab = FileTab.createTab(editor, file);
+                editorTabPane.getTabs().add(newTab);
+                return newTab;
+            });
+        editorTabPane.getSelectionModel().select(tab);
+        if (tab instanceof FileTab.FileTabTab fileTab && fileTab.getController() != null) {
+            fileTab.getController().navigateTo(caretPosition);
+        }
     }
 
     private static void addFileToTreeItem(File lastFile, TreeItem<File> treeItem) {

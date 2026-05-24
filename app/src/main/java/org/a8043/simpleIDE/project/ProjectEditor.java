@@ -18,14 +18,18 @@ import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.buildTool.BuildTool;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
 import org.a8043.simpleIDE.project.index.Index;
+import org.a8043.simpleIDE.project.index.IndexPoint;
+import org.a8043.simpleIDE.project.index.Module;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.RunnableType;
 import org.a8043.simpleIDE.util.GitUtil;
+import org.a8043.simpleIDE.util.JavaUtil;
 
 import java.io.Closeable;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -97,15 +101,15 @@ public class ProjectEditor implements Closeable {
         javaParserThreadLocal = ThreadLocal.withInitial(() -> new JavaParser(new ParserConfiguration()
             .setLanguageLevel(jdk.getLanguageLevel()).setCharacterEncoding(StandardCharsets.UTF_8)));
 
+        indexCacheFile = new File(configDir, "indexCache.json");
+        index = new Index(this);
+
         modelFile = new File(configDir, "model.json");
         if (modelFile.exists()) {
             projectModel = JSONUtil.toBean(FileUtil.readUtf8String(modelFile), buildToolType.getModelType());
         } else {
             projectModel = buildTool.sync(this);
         }
-
-        indexCacheFile = new File(configDir, "indexCache.json");
-        index = new Index(this);
 
         if (new File(project.getProjectDir(), ".git").exists()) {
             GitUtil.open(project.getProjectDir());
@@ -131,11 +135,80 @@ public class ProjectEditor implements Closeable {
         return javaParserThreadLocal.get();
     }
 
-    public ControllableFile openFile(File file, String content) {
-        ControllableFile controllableFile = new ControllableFile(file, content);
+    public ControllableFile openFile(File file, String content, boolean readOnly) {
+        ControllableFile controllableFile = new ControllableFile(file, content, readOnly);
         controllableFile.read();
         openedFileList.add(controllableFile);
         return controllableFile;
+    }
+
+    public boolean isReadOnlyFile(File file) {
+        if (file == null) {
+            return false;
+        }
+        try {
+            File sourceCacheDir = new File(configDir, "source-cache").getCanonicalFile();
+            File targetFile = file.getCanonicalFile();
+            return targetFile.toPath().startsWith(sourceCacheDir.toPath());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public IndexPoint resolveIndexPointByFile(File file) {
+        if (file == null) {
+            return null;
+        }
+
+        try {
+            File canonicalFile = file.getCanonicalFile();
+            File sourceCacheDir = new File(configDir, "source-cache").getCanonicalFile();
+            if (canonicalFile.toPath().startsWith(sourceCacheDir.toPath())) {
+                String relativePath = sourceCacheDir.toPath().relativize(canonicalFile.toPath()).toString()
+                    .replace("\\", "/");
+                String[] path = relativePath.split("/");
+                if (path.length < 2) {
+                    return null;
+                }
+                String moduleName = path[0];
+                Module module = index.getModuleByCacheName(moduleName);
+                if (module == null) {
+                    return null;
+                }
+                String[] sourcePath = Arrays.copyOfRange(path, 1, path.length);
+                if (sourcePath.length > 1 && module.getProjectModule() != null &&
+                    module.getProjectModule().getName().equals(sourcePath[0])) {
+                    sourcePath = Arrays.copyOfRange(sourcePath, 1, sourcePath.length);
+                }
+                if (sourcePath.length == 0 || !sourcePath[sourcePath.length - 1].endsWith(".java")) {
+                    return null;
+                }
+                sourcePath[sourcePath.length - 1] = sourcePath[sourcePath.length - 1]
+                    .substring(0, sourcePath[sourcePath.length - 1].length() - ".java".length());
+                return module.getPoint(sourcePath);
+            }
+
+            for (File srcDir : projectModel.getSrcDirList()) {
+                File canonicalSrcDir = srcDir.getCanonicalFile();
+                if (!canonicalFile.toPath().startsWith(canonicalSrcDir.toPath())) {
+                    continue;
+                }
+                String relativePath = canonicalSrcDir.toPath().relativize(canonicalFile.toPath()).toString()
+                    .replace("\\", "/");
+                if (!relativePath.endsWith(".java")) {
+                    continue;
+                }
+                String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
+                Module module = JavaUtil.resolveModuleByPath(index, path);
+                if (module == null) {
+                    continue;
+                }
+                return module.getPoint(path);
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
     }
 
     public void closeFile(ControllableFile controllableFile) {
@@ -165,7 +238,7 @@ public class ProjectEditor implements Closeable {
     }
 
     public synchronized void saveFiles() {
-        openedFileList.forEach(ControllableFile::write);
+        openedFileList.stream().filter(file -> !file.isReadOnly()).forEach(ControllableFile::write);
     }
 
     private void saveConfig() {

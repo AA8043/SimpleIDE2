@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.buildTool.BuildToolType;
-import org.a8043.simpleIDE.project.buildTool.Gradle;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -33,10 +32,9 @@ public class ProjectConfig {
     }
 
     public static ProjectConfig fromGradle(ProjectEditor editor) {
-        Gradle gradle = (Gradle) editor.getBuildTool();
-        // TODO: 从gradle生成config
         return new ProjectConfig(new File(editor.getProject().getProjectDir(), "jdk"),
-            BuildToolType.GRADLE, Main.instance.getSettings().getDefaultGradlePath(), new ArrayList<>(), "");
+            BuildToolType.GRADLE, Main.instance.getSettings().getDefaultGradlePath(),
+            new ArrayList<>(), "");
     }
 
     public static ProjectConfig fromDefault(ProjectEditor editor) {

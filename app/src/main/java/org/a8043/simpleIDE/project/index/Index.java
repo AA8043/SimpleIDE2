@@ -79,6 +79,59 @@ public class Index extends JSONSupport implements Closeable {
             .findFirst().orElse(null);
     }
 
+    public CompilationUnit getSourceCompilationUnit(IndexPoint point) {
+        File sourceFile = resolveSourceFile(point);
+        if (sourceFile == null || !sourceFile.exists()) {
+            return null;
+        }
+        ParseResult<CompilationUnit> result = editor.getJavaParser().parse(FileUtil.readUtf8String(sourceFile));
+        return result.getResult().orElse(null);
+    }
+
+    public File resolveSourceFile(IndexPoint point) {
+        if (point == null || point.getPkg() == null || point.getPkg().getModule() == null) {
+            return null;
+        }
+
+        Module module = point.getPkg().getModule();
+        ProjectModule projectModule = module.getProjectModule();
+        if (projectModule == null) {
+            return null;
+        }
+
+        String relativePath = StrUtil.join("/", (Object[]) point.getPath()) + ".java";
+        if (projectModule.getLocation() == ProjectModule.Location.PROJECT) {
+            for (File srcDir : projectModule.getSrcDirList()) {
+                File candidate = new File(srcDir, relativePath);
+                if (candidate.exists()) {
+                    return candidate;
+                }
+            }
+        }
+
+        ZipFile zipFile = projectModule.getLocation() == ProjectModule.Location.JDK ? standardLibraryZip :
+            resolveDependencyZip(module);
+        if (zipFile == null) {
+            return null;
+        }
+
+        for (String entryName : List.of(projectModule.getName() + "/" + relativePath, relativePath)) {
+            ZipEntry entry = zipFile.getEntry(entryName);
+            if (entry == null) {
+                continue;
+            }
+            File cacheFile = new File(editor.getConfigDir(), "source-cache/" + module.getCacheName() + "/" + entryName);
+            if (!cacheFile.exists() || shouldRefreshSourceCache(cacheFile, entry)) {
+                if (!cacheFile.getParentFile().exists() && !cacheFile.getParentFile().mkdirs()) {
+                    throw new RuntimeException();
+                }
+                FileUtil.writeUtf8String(IoUtil.readUtf8(ZipUtil.getStream(zipFile, entry)), cacheFile);
+            }
+            return cacheFile;
+        }
+        return null;
+    }
+
     public synchronized IndexPoint getOrCreateArrayType(IndexPoint componentType) {
         if (componentType == null) {
             return null;
@@ -355,10 +408,12 @@ public class Index extends JSONSupport implements Closeable {
     public void close() {
         standardLibraryZip.close();
         dependencyZipMap.values().forEach(zipFile -> {
-            try {
-                zipFile.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            if (zipFile != null) {
+                try {
+                    zipFile.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
         });
     }
@@ -545,8 +600,24 @@ public class Index extends JSONSupport implements Closeable {
                StrUtil.join(".", (Object[]) componentType.getPath()) + "[]";
     }
 
+    private boolean shouldRefreshSourceCache(File cacheFile, ZipEntry entry) {
+        long expectedSize = entry.getSize();
+        return expectedSize >= 0 && cacheFile.length() != expectedSize;
+    }
+
     private IndexPoint resolveJavaLangObjectType() {
         Module javaBase = getModule("java.base");
         return javaBase != null ? javaBase.getPoint(new String[]{"java", "lang", "Object"}) : null;
+    }
+
+    private ZipFile resolveDependencyZip(Module module) {
+        if (module == null || module.getProjectModule() == null) {
+            return null;
+        }
+        String moduleName = module.getProjectModule().getName();
+        return dependencyZipMap.entrySet().stream()
+            .filter(entry -> Objects.equals(entry.getKey().getModuleName(), moduleName))
+            .map(Map.Entry::getValue)
+            .findFirst().orElse(null);
     }
 }

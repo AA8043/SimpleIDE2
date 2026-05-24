@@ -62,19 +62,19 @@ public class JavaRunnable extends RunnableTask {
         public void run() {
             tab.waitForLoad();
 
-            tab.writelnToTerminal("==编译==\n\n");
+            tab.writelnToTerminal("==缂栬瘧==\n\n");
             int exitCode = getEditor().getBuildTool().compile(string ->
                 Platform.runLater(() -> tab.writeToTerminal(string + "\n"))).get();
             if (exitCode != 0) {
-                tab.writelnToTerminal("\n\n==编译失败==\n");
+                tab.writelnToTerminal("\n\n==缂栬瘧澶辫触==\n");
                 return;
             }
             tab.clearTerminal();
 
-            tab.writelnToTerminal("==准备运行==\n\n");
+            tab.writelnToTerminal("==鍑嗗杩愯==\n\n");
             List<String> classpathList = new ArrayList<>();
-            classpathList.add(new File(getEditor().getProject().getProjectDir(),
-                "target/classes").getAbsolutePath());
+            getEditor().getBuildTool().getRuntimeClasspathList().stream().map(File::getAbsolutePath)
+                .forEach(classpathList::add);
             getEditor().getProjectModel().getDependencyList().stream().map(Dependency::getJarFile)
                 .toList().forEach(jar -> classpathList.add(jar.getAbsolutePath()));
             tab.writelnToTerminal("classpathList: " + classpathList);
@@ -83,14 +83,14 @@ public class JavaRunnable extends RunnableTask {
             }
             tab.clearTerminal();
 
-            tab.writelnToTerminal("==运行==\n\n");
+            tab.writelnToTerminal("==杩愯==\n\n");
             List<String> argList = new ArrayList<>();
             argList.add(getEditor().getJdk().getJavaFile().getAbsolutePath());
             if (debugPort != -1) {
                 argList.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=" + debugPort);
             }
             argList.add("-classpath");
-            argList.add(StrUtil.join(";", classpathList));
+            argList.add(StrUtil.join(File.pathSeparator, classpathList));
             argList.add(runClass);
             process = RuntimeUtil.exec(argList.toArray(new String[0]));
             outToTerminal(process.getInputStream());
@@ -99,7 +99,7 @@ public class JavaRunnable extends RunnableTask {
                 tab.runDebugger();
             }
             int runExitCode = process.waitFor();
-            tab.writelnToTerminal("\n\n==运行结束, 退出码: " + runExitCode + " ==\n");
+            tab.writelnToTerminal("\n\n==杩愯缁撴潫, 閫€鍑虹爜: " + runExitCode + " ==\n");
         }
 
         private void outToTerminal(InputStream inputStream) {

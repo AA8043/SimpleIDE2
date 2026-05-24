@@ -161,6 +161,11 @@ public class Maven extends BuildTool {
         return future;
     }
 
+    @Override
+    public List<File> getRuntimeClasspathList() {
+        return List.of(new File(getEditor().getProject().getProjectDir(), "target/classes"));
+    }
+
     private void run(List<String> goalList, Consumer<String> onOutput, Consumer<Integer> onFinish) {
         InvocationRequest request = new DefaultInvocationRequest();
         request.setPomFile(pomFile);

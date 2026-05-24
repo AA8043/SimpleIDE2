@@ -1,6 +1,5 @@
 package org.a8043.simpleIDE.fileEditor.javaFile;
 
-import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
@@ -29,10 +28,13 @@ public class JavaDiagnosticService {
     }
 
     public void analyze(String content) {
-        ParseResult<CompilationUnit> parseResult = new JavaParser().parse(content);
+        ParseResult<CompilationUnit> parseResult = editor.getJavaParser().parse(content);
         state.getParseResultHistoryList().add(parseResult);
         state.getContentHistoryList().add(content);
-        state.setIndexPoint(editor.getIndex().index(state.getIndexPoint().getPkg(), state.getIndexPoint().getName(), content));
+        if (state.getIndexPoint() != null) {
+            state.setIndexPoint(editor.getIndex().index(state.getIndexPoint().getPkg(),
+                state.getIndexPoint().getName(), content));
+        }
         state.getProblemList().clear();
         state.getProblemHighlightList().clear();
         collectSyntaxProblems(parseResult, content);

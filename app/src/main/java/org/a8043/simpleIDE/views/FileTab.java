@@ -18,9 +18,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.control.*;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyEvent;
+import javafx.scene.input.*;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -103,7 +101,7 @@ public class FileTab {
         this.editor = editor;
         FileEditor fileEditor;
         boolean isFailedToOpen;
-        ControllableFile controllableFile = editor.openFile(file, content);
+        ControllableFile controllableFile = editor.openFile(file, content, editor.isReadOnlyFile(file));
         try {
             fileEditor = FILE_TYPE_MAP.getOrDefault(fileType, FILE_TYPE_MAP.get("*"))
                 .create(controllableFile, editor);
@@ -186,6 +184,7 @@ public class FileTab {
         codeArea.getStylesheets().add("data:text/css," + Main.MAIN_STYLE);
         codeArea.getStylesheets().add("data:text/css," + fileEditor.getHighlightingStyle());
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+        codeArea.setEditable(!fileEditor.getFile().isReadOnly());
         pane.getChildren().add(codeAreaScrollPane);
         AnchorPane.setTopAnchor(codeAreaScrollPane, 0.0);
         AnchorPane.setBottomAnchor(codeAreaScrollPane, 0.0);
@@ -251,36 +250,52 @@ public class FileTab {
             }
         });
 
-        AtomicBoolean isAsking = new AtomicBoolean(false);
-        org.a8043.simpleIDE.util.FileUtil.watch(fileEditor.getFile().getFile(), new SimpleWatcher() {
-            @Override
-            public void onModify(WatchEvent<?> event, Path currentPath) {
-                String newContent = fileEditor.getFile().read();
-                if (!Objects.equals(newContent, codeArea.getText()) && !newContent.isEmpty() && !isAsking.get()) {
-                    isAsking.set(true);
-                    Platform.runLater(() -> {
-                        Button rereadButton = new Button("fileExternalChange.reread");
-                        Button ignoreButton = new Button("fileExternalChange.ignore");
-                        Main.ModalController<VBox> modal = Main.instance.showModal("fileExternalChange",
-                            new VBox(new Label(ResourceManager.getText("fileExternalChange.description",
-                                fileEditor.getFile().getFile().getName())),
-                                new BorderPane(null, null, rereadButton,
-                                    null, ignoreButton)), 400, 200);
-                        modal.setOnClose(() -> isAsking.set(false));
-
-                        rereadButton.setOnAction(e -> {
-                            codeArea.replaceText(newContent);
-                            modal.close();
-                        });
-                        ignoreButton.setOnAction(e -> {
-                            fileEditor.getFile().setContent(codeArea.getText());
-                            fileEditor.getFile().write();
-                            modal.close();
-                        });
-                    });
+        codeArea.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
+            if (event.getButton() != MouseButton.PRIMARY || !event.isControlDown()) {
+                return;
+            }
+            int position = codeArea.hit(event.getX(), event.getY()).getInsertionIndex();
+            if (fileEditor instanceof JavaFile javaFile) {
+                JavaFile.SourceLocation location = javaFile.resolveSourceLocation(position);
+                if (location != null && ProjectView.getCurrent() != null) {
+                    ProjectView.getCurrent().openFile(location.getFile(), location.getPosition());
+                    event.consume();
                 }
             }
-        }, WatchMonitor.ENTRY_MODIFY);
+        });
+
+        if (!fileEditor.getFile().isReadOnly()) {
+            AtomicBoolean isAsking = new AtomicBoolean(false);
+            org.a8043.simpleIDE.util.FileUtil.watch(fileEditor.getFile().getFile(), new SimpleWatcher() {
+                @Override
+                public void onModify(WatchEvent<?> event, Path currentPath) {
+                    String newContent = fileEditor.getFile().read();
+                    if (!Objects.equals(newContent, codeArea.getText()) && !newContent.isEmpty() && !isAsking.get()) {
+                        isAsking.set(true);
+                        Platform.runLater(() -> {
+                            Button rereadButton = new Button("fileExternalChange.reread");
+                            Button ignoreButton = new Button("fileExternalChange.ignore");
+                            Main.ModalController<VBox> modal = Main.instance.showModal("fileExternalChange",
+                                new VBox(new Label(ResourceManager.getText("fileExternalChange.description",
+                                    fileEditor.getFile().getFile().getName())),
+                                    new BorderPane(null, null, rereadButton,
+                                        null, ignoreButton)), 400, 200);
+                            modal.setOnClose(() -> isAsking.set(false));
+
+                            rereadButton.setOnAction(e -> {
+                                codeArea.replaceText(newContent);
+                                modal.close();
+                            });
+                            ignoreButton.setOnAction(e -> {
+                                fileEditor.getFile().setContent(codeArea.getText());
+                                fileEditor.getFile().write();
+                                modal.close();
+                            });
+                        });
+                    }
+                }
+            }, WatchMonitor.ENTRY_MODIFY);
+        }
 
         toolBarContent.getChildren().addAll(TOOL_LIST.stream().map(factory -> factory.create(this)).toList());
         toolBar.getChildren().add(toolBarContent);
@@ -500,15 +515,25 @@ public class FileTab {
         codeArea.requestFocus();
     }
 
+    public void navigateTo(int position) {
+        int clampedPosition = Math.clamp(position, 0, codeArea.getLength());
+        codeArea.moveTo(clampedPosition);
+        codeArea.requestFollowCaret();
+        codeArea.requestFocus();
+    }
+
     @Getter
     public static class FileTabTab extends Tab {
         private final File file;
         private final String name;
+        @Getter
+        private final FileTab controller;
 
         public FileTabTab(File file, Node node, FileTab tab) {
             super(null, node);
             this.file = file;
             name = file.getName();
+            controller = tab;
             setGraphic(org.a8043.simpleIDE.util.FileUtil.getDisplayItem(file));
             setOnClosed(e -> tab.editor.closeFile(tab.fileEditor.getFile()));
         }

@@ -1,5 +1,6 @@
 package org.a8043.simpleIDE.fileEditor.javaFile;
 
+import cn.hutool.core.io.FileUtil;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Modifier;
@@ -17,6 +18,7 @@ import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.MethodSignature;
 import org.a8043.simpleIDE.util.JavaUtil;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,13 +30,15 @@ public class JavaHoverService {
     private final ProjectEditor editor;
     private final JavaFileState state;
     private final Supplier<String> contentSupplier;
+    private final Supplier<File> fileSupplier;
     private final JavaTypeResolver typeResolver;
 
     public JavaHoverService(ProjectEditor editor, JavaFileState state, Supplier<String> contentSupplier,
-                            JavaTypeResolver typeResolver) {
+                            Supplier<File> fileSupplier, JavaTypeResolver typeResolver) {
         this.editor = editor;
         this.state = state;
         this.contentSupplier = contentSupplier;
+        this.fileSupplier = fileSupplier;
         this.typeResolver = typeResolver;
     }
 
@@ -49,6 +53,179 @@ public class JavaHoverService {
             return methodHoverTip;
         }
         return computeSymbolHoverTip(position, compilationUnit);
+    }
+
+    public JavaFile.SourceLocation resolveSourceLocation(int position) {
+        CompilationUnit compilationUnit = state.getLatestCompilationUnit();
+        if (compilationUnit == null) {
+            return null;
+        }
+
+        AtomicReference<JavaFile.SourceLocation> sourceLocation = new AtomicReference<>();
+        compilationUnit.accept(new VoidVisitorAdapter<Void>() {
+            @Override
+            public void visit(MethodDeclaration n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                sourceLocation.set(createLocation(getCurrentFile(), n, getContent()));
+            }
+
+            @Override
+            public void visit(Parameter n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                sourceLocation.set(createLocation(getCurrentFile(), n, getContent()));
+            }
+
+            @Override
+            public void visit(VariableDeclarator n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                sourceLocation.set(createLocation(getCurrentFile(), n, getContent()));
+            }
+
+            @Override
+            public void visit(MethodCallExpr n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                IndexPoint ownerType = resolveMethodCallOwnerType(compilationUnit, n);
+                CompilationUnit sourceUnit = ownerType != null ? editor.getIndex().getCompilationUnit(ownerType) : null;
+                if (sourceUnit == null && ownerType != null) {
+                    sourceUnit = editor.getIndex().getSourceCompilationUnit(ownerType);
+                }
+                MethodDeclaration declaration = sourceUnit != null ?
+                    typeResolver.resolveMethodDeclaration(sourceUnit, n, compilationUnit) : null;
+                if (declaration != null) {
+                    File file = resolveSourceFile(ownerType);
+                    sourceLocation.set(createLocation(file, declaration, readContent(file)));
+                }
+            }
+
+            @Override
+            public void visit(FieldAccessExpr n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                JavaTypeResolver.JavaFieldLookup fieldLookup =
+                    typeResolver.resolveFieldLookup(typeResolver.resolveExpressionType(n.getScope(), compilationUnit),
+                        n.getNameAsString());
+                if (fieldLookup != null) {
+                    File file = resolveSourceFile(fieldLookup.owner());
+                    VariableDeclarator fieldVariable = typeResolver.resolveFieldVariable(fieldLookup.owner(),
+                        n.getNameAsString());
+                    if (fieldVariable != null) {
+                        sourceLocation.set(createLocation(file, fieldVariable, readContent(file)));
+                    }
+                }
+            }
+
+            @Override
+            public void visit(NameExpr n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                Parameter parameter = typeResolver.resolveVisibleParameter(n);
+                if (parameter != null) {
+                    sourceLocation.set(createLocation(getCurrentFile(), parameter, getContent()));
+                    return;
+                }
+                VariableDeclarator localVariable = typeResolver.resolveVisibleLocalVariable(n);
+                if (localVariable != null) {
+                    sourceLocation.set(createLocation(getCurrentFile(), localVariable, getContent()));
+                    return;
+                }
+                JavaTypeResolver.JavaFieldLookup fieldLookup = typeResolver.resolveFieldLookup(state.getIndexPoint(),
+                    n.getNameAsString());
+                if (fieldLookup != null) {
+                    File file = resolveSourceFile(fieldLookup.owner());
+                    VariableDeclarator fieldVariable = typeResolver.resolveFieldVariable(fieldLookup.owner(),
+                        n.getNameAsString());
+                    if (fieldVariable != null) {
+                        sourceLocation.set(createLocation(file, fieldVariable, readContent(file)));
+                        return;
+                    }
+                }
+                IndexPoint typePoint = typeResolver.resolveType(n.getNameAsString(), compilationUnit);
+                if (typePoint != null) {
+                    ClassOrInterfaceDeclaration declaration = typeResolver.resolveTypeDeclaration(typePoint);
+                    if (declaration != null) {
+                        File file = resolveSourceFile(typePoint);
+                        sourceLocation.set(createLocation(file, declaration, readContent(file)));
+                    }
+                }
+            }
+
+            @Override
+            public void visit(ClassOrInterfaceDeclaration n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                sourceLocation.set(createLocation(getCurrentFile(), n, getContent()));
+            }
+
+            @Override
+            public void visit(ClassOrInterfaceType n, Void arg) {
+                if (sourceLocation.get() != null) {
+                    return;
+                }
+                Range range = n.getName().getRange().orElse(null);
+                if (range == null || !JavaUtil.isInRange(position, range, getContent())) {
+                    super.visit(n, arg);
+                    return;
+                }
+                IndexPoint typePoint = typeResolver.resolveType(n.getNameWithScope(), compilationUnit);
+                if (typePoint == null) {
+                    typePoint = typeResolver.resolveType(n.getNameAsString(), compilationUnit);
+                }
+                if (typePoint != null) {
+                    ClassOrInterfaceDeclaration declaration = typeResolver.resolveTypeDeclaration(typePoint);
+                    if (declaration != null) {
+                        File file = resolveSourceFile(typePoint);
+                        sourceLocation.set(createLocation(file, declaration, readContent(file)));
+                    }
+                }
+            }
+        }, null);
+        return sourceLocation.get();
     }
 
     private String computeMethodHoverTip(int position, CompilationUnit compilationUnit) {
@@ -68,40 +245,17 @@ public class JavaHoverService {
                     return;
                 }
 
-                List<IndexPoint> lastPointList = new ArrayList<>();
-                IndexPoint currentTypePoint = resolveCurrentTypePoint(compilationUnit, n);
-                lastPointList.add(currentTypePoint);
-                for (Expression expr : typeResolver.getScopeExpressionList(n)) {
-                    IndexPoint lastPoint = lastPointList.getLast();
-                    IndexPoint resolvedPoint = switch (expr) {
-                        case MethodCallExpr methodCallExpr -> {
-                            MethodSignature methodSignature1 = typeResolver.resolveMethodSignature(lastPoint, methodCallExpr,
-                                compilationUnit);
-                            if (methodSignature1 == null) {
-                                yield null;
-                            }
-                            methodSignature.set(methodSignature1);
-                            yield methodSignature1.getReturnType();
-                        }
-                        case FieldAccessExpr fieldAccessExpr -> {
-                            JavaTypeResolver.JavaFieldLookup fieldLookup =
-                                typeResolver.resolveFieldLookup(lastPoint, fieldAccessExpr.getNameAsString());
-                            yield fieldLookup != null ? fieldLookup.signature().getType() : null;
-                        }
-                        case NameExpr nameExpr -> typeResolver.resolveExpressionType(nameExpr, compilationUnit);
-                        case ThisExpr ignored -> lastPoint != null ? lastPoint : state.getIndexPoint();
-                        case SuperExpr ignored -> lastPoint != null ? lastPoint.getParent() :
-                            state.getIndexPoint() != null ? state.getIndexPoint().getParent() : null;
-                        case EnclosedExpr enclosedExpr ->
-                            typeResolver.resolveExpressionType(enclosedExpr.getInner(), compilationUnit);
-                        default -> typeResolver.resolveExpressionType(expr, compilationUnit);
-                    };
-                    lastPointList.add(resolvedPoint);
+                List<IndexPoint> resolvedPointList = resolveMethodCallScopePoints(compilationUnit, n, methodSignature);
+                if (resolvedPointList.size() < 2) {
+                    return;
                 }
 
-                IndexPoint in = lastPointList.get(lastPointList.size() - 2);
+                IndexPoint in = resolvedPointList.get(resolvedPointList.size() - 2);
                 source.set(in);
                 CompilationUnit unit = in != null ? editor.getIndex().getCompilationUnit(in) : null;
+                if (unit == null && in != null) {
+                    unit = editor.getIndex().getSourceCompilationUnit(in);
+                }
                 if (unit != null) {
                     methodDeclaration.set(typeResolver.resolveMethodDeclaration(unit, n, compilationUnit));
                 }
@@ -117,6 +271,41 @@ public class JavaHoverService {
     private String resolveMethodCallHover(MethodCallExpr n, CompilationUnit compilationUnit) {
         AtomicReference<MethodDeclaration> methodDeclaration = new AtomicReference<>();
         AtomicReference<MethodSignature> methodSignature = new AtomicReference<>();
+        List<IndexPoint> lastPointList = resolveMethodCallScopePoints(compilationUnit, n, methodSignature);
+
+        if (methodSignature.get() == null || lastPointList.size() < 2) {
+            return "";
+        }
+        IndexPoint in = lastPointList.get(lastPointList.size() - 2);
+        CompilationUnit unit = in != null ? editor.getIndex().getCompilationUnit(in) : null;
+        if (unit == null && in != null) {
+            unit = editor.getIndex().getSourceCompilationUnit(in);
+        }
+        if (unit != null) {
+            methodDeclaration.set(typeResolver.resolveMethodDeclaration(unit, n, compilationUnit));
+        }
+        return formatMethodHover(in, methodDeclaration.get(), methodSignature.get());
+    }
+
+    private IndexPoint resolveCurrentTypePoint(CompilationUnit compilationUnit, Node node) {
+        if (state.getIndexPoint() != null) {
+            return state.getIndexPoint();
+        }
+        ClassOrInterfaceDeclaration typeDeclaration = node.findAncestor(ClassOrInterfaceDeclaration.class).orElse(null);
+        if (typeDeclaration != null) {
+            return typeResolver.resolveType(typeDeclaration.getNameAsString(), compilationUnit);
+        }
+        return null;
+    }
+
+    private IndexPoint resolveMethodCallOwnerType(CompilationUnit compilationUnit, MethodCallExpr n) {
+        List<IndexPoint> resolvedPointList = resolveMethodCallScopePoints(compilationUnit, n,
+            new AtomicReference<MethodSignature>());
+        return resolvedPointList.size() >= 2 ? resolvedPointList.get(resolvedPointList.size() - 2) : null;
+    }
+
+    private List<IndexPoint> resolveMethodCallScopePoints(CompilationUnit compilationUnit, MethodCallExpr n,
+                                                          AtomicReference<MethodSignature> methodSignature) {
         List<IndexPoint> lastPointList = new ArrayList<>();
         IndexPoint currentTypePoint = resolveCurrentTypePoint(compilationUnit, n);
         lastPointList.add(currentTypePoint);
@@ -129,7 +318,9 @@ public class JavaHoverService {
                     if (methodSignature1 == null) {
                         yield null;
                     }
-                    methodSignature.set(methodSignature1);
+                    if (methodSignature != null) {
+                        methodSignature.set(methodSignature1);
+                    }
                     yield methodSignature1.getReturnType();
                 }
                 case FieldAccessExpr fieldAccessExpr -> {
@@ -147,27 +338,7 @@ public class JavaHoverService {
             };
             lastPointList.add(resolvedPoint);
         }
-
-        if (methodSignature.get() == null || lastPointList.size() < 2) {
-            return "";
-        }
-        IndexPoint in = lastPointList.get(lastPointList.size() - 2);
-        CompilationUnit unit = in != null ? editor.getIndex().getCompilationUnit(in) : null;
-        if (unit != null) {
-            methodDeclaration.set(typeResolver.resolveMethodDeclaration(unit, n, compilationUnit));
-        }
-        return formatMethodHover(in, methodDeclaration.get(), methodSignature.get());
-    }
-
-    private IndexPoint resolveCurrentTypePoint(CompilationUnit compilationUnit, Node node) {
-        if (state.getIndexPoint() != null) {
-            return state.getIndexPoint();
-        }
-        ClassOrInterfaceDeclaration typeDeclaration = node.findAncestor(ClassOrInterfaceDeclaration.class).orElse(null);
-        if (typeDeclaration != null) {
-            return typeResolver.resolveType(typeDeclaration.getNameAsString(), compilationUnit);
-        }
-        return null;
+        return lastPointList;
     }
 
     private String formatMethodDeclarationHover(MethodDeclaration declaration, CompilationUnit compilationUnit) {
@@ -489,6 +660,33 @@ public class JavaHoverService {
 
     private String getContent() {
         return contentSupplier.get();
+    }
+
+    private File getCurrentFile() {
+        return fileSupplier.get();
+    }
+
+    private File resolveSourceFile(IndexPoint typePoint) {
+        File file = editor.getIndex().resolveSourceFile(typePoint);
+        return file != null ? file : getCurrentFile();
+    }
+
+    private String readContent(File file) {
+        if (file == null || file.equals(getCurrentFile())) {
+            return getContent();
+        }
+        return FileUtil.readUtf8String(file);
+    }
+
+    private JavaFile.SourceLocation createLocation(File file, Node node, String content) {
+        if (file == null || node == null) {
+            return null;
+        }
+        Range range = node.getRange().orElse(null);
+        if (range == null) {
+            return null;
+        }
+        return new JavaFile.SourceLocation(file, JavaUtil.getPosition(range.begin, content));
     }
 
     private record HoverDoc(String description, Map<String, String> paramTagMap, Map<String, String> otherTagMap) {
