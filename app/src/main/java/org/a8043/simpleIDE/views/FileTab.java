@@ -35,6 +35,7 @@ import org.a8043.simpleIDE.fileEditor.DefaultFile;
 import org.a8043.simpleIDE.fileEditor.FileEditor;
 import org.a8043.simpleIDE.fileEditor.javaFile.JavaFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.resource.ResourceManager;
 import org.a8043.simpleIDE.util.Util;
 import org.fxmisc.flowless.VirtualizedScrollPane;
@@ -98,10 +99,13 @@ public class FileTab {
     private final AtomicReference<Main.ModalController<CompleteBox>> nowCompleteBox = new AtomicReference<>();
 
     private FileTab(ProjectEditor editor, File file, String content, String fileType) {
+        this(editor, editor.openFile(file, content, false), fileType);
+    }
+
+    private FileTab(ProjectEditor editor, ControllableFile controllableFile, String fileType) {
         this.editor = editor;
         FileEditor fileEditor;
         boolean isFailedToOpen;
-        ControllableFile controllableFile = editor.openFile(file, content, editor.isReadOnlyFile(file));
         try {
             fileEditor = FILE_TYPE_MAP.getOrDefault(fileType, FILE_TYPE_MAP.get("*"))
                 .create(controllableFile, editor);
@@ -124,6 +128,15 @@ public class FileTab {
         FXMLLoader fxmlLoader = new FXMLLoader(FXML_URL);
         fxmlLoader.setControllerFactory(param -> new FileTab(editor, file, null, FileUtil.getSuffix(file)));
         return new FileTabTab(file, fxmlLoader.load(), fxmlLoader.getController());
+    }
+
+    @SneakyThrows
+    public static Tab createCachedSourceTab(ProjectEditor editor, IndexPoint point) {
+        ControllableFile controllableFile = editor.getIndex().openCachedSourceFile(point);
+        FXMLLoader fxmlLoader = new FXMLLoader(FXML_URL);
+        fxmlLoader.setControllerFactory(param ->
+            new FileTab(editor, controllableFile, FileUtil.getSuffix(controllableFile.getName())));
+        return new FileTabTab(point, controllableFile.getName(), fxmlLoader.load(), fxmlLoader.getController());
     }
 
     @FXML
@@ -258,7 +271,11 @@ public class FileTab {
             if (fileEditor instanceof JavaFile javaFile) {
                 JavaFile.SourceLocation location = javaFile.resolveSourceLocation(position);
                 if (location != null && ProjectView.getCurrent() != null) {
-                    ProjectView.getCurrent().openFile(location.getFile(), location.getPosition());
+                    if (location.getPoint() != null && location.getFile() == null) {
+                        ProjectView.getCurrent().openCachedSourceFile(location.getPoint(), location.getPosition());
+                    } else {
+                        ProjectView.getCurrent().openFile(location.getFile(), location.getPosition());
+                    }
                     event.consume();
                 }
             }
@@ -277,7 +294,7 @@ public class FileTab {
                             Button ignoreButton = new Button("fileExternalChange.ignore");
                             Main.ModalController<VBox> modal = Main.instance.showModal("fileExternalChange",
                                 new VBox(new Label(ResourceManager.getText("fileExternalChange.description",
-                                    fileEditor.getFile().getFile().getName())),
+                                    fileEditor.getFile().getName())),
                                     new BorderPane(null, null, rereadButton,
                                         null, ignoreButton)), 400, 200);
                             modal.setOnClose(() -> isAsking.set(false));
@@ -525,16 +542,26 @@ public class FileTab {
     @Getter
     public static class FileTabTab extends Tab {
         private final File file;
+        private final IndexPoint point;
         private final String name;
         @Getter
         private final FileTab controller;
 
         public FileTabTab(File file, Node node, FileTab tab) {
+            this(file, null, file.getName(), node, tab);
+        }
+
+        public FileTabTab(IndexPoint point, String name, Node node, FileTab tab) {
+            this(null, point, name, node, tab);
+        }
+
+        private FileTabTab(File file, IndexPoint point, String name, Node node, FileTab tab) {
             super(null, node);
             this.file = file;
-            name = file.getName();
+            this.point = point;
+            this.name = name;
             controller = tab;
-            setGraphic(org.a8043.simpleIDE.util.FileUtil.getDisplayItem(file));
+            setGraphic(file != null ? org.a8043.simpleIDE.util.FileUtil.getDisplayItem(file) : new Label(name));
             setOnClosed(e -> tab.editor.closeFile(tab.fileEditor.getFile()));
         }
     }

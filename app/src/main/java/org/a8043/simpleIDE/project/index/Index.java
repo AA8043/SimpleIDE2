@@ -11,11 +11,11 @@ import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.modules.ModuleRequiresDirective;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
+import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.ProjectModule;
 import org.a8043.simpleIDE.project.buildTool.Dependency;
@@ -48,6 +48,8 @@ public class Index extends JSONSupport implements Closeable {
     private final Map<Dependency, ZipFile> dependencyZipMap = new HashMap<>();
     @Getter
     private final Map<String, IndexPoint> basicTypeMap;
+    private final Map<IndexPoint, String> sourceContentCacheMap = new IdentityHashMap<>();
+    private final Map<IndexPoint, String> sourceDisplayNameCacheMap = new IdentityHashMap<>();
     private final Map<String, IndexPoint> arrayTypeMap = new HashMap<>();
     private final Map<IndexPoint, IndexPoint> arrayComponentTypeMap = new IdentityHashMap<>();
 
@@ -80,7 +82,16 @@ public class Index extends JSONSupport implements Closeable {
     }
 
     public CompilationUnit getSourceCompilationUnit(IndexPoint point) {
-        File sourceFile = resolveSourceFile(point);
+        if (point == null) {
+            return null;
+        }
+        String content = getCachedSourceContent(point);
+        if (content != null) {
+            ParseResult<CompilationUnit> result = editor.getJavaParser().parse(content);
+            return result.getResult().orElse(null);
+        }
+
+        File sourceFile = resolveProjectSourceFile(point);
         if (sourceFile == null || !sourceFile.exists()) {
             return null;
         }
@@ -101,12 +112,7 @@ public class Index extends JSONSupport implements Closeable {
 
         String relativePath = StrUtil.join("/", (Object[]) point.getPath()) + ".java";
         if (projectModule.getLocation() == ProjectModule.Location.PROJECT) {
-            for (File srcDir : projectModule.getSrcDirList()) {
-                File candidate = new File(srcDir, relativePath);
-                if (candidate.exists()) {
-                    return candidate;
-                }
-            }
+            return resolveProjectSourceFile(point);
         }
 
         ZipFile zipFile = projectModule.getLocation() == ProjectModule.Location.JDK ? standardLibraryZip :
@@ -120,14 +126,8 @@ public class Index extends JSONSupport implements Closeable {
             if (entry == null) {
                 continue;
             }
-            File cacheFile = new File(editor.getConfigDir(), "source-cache/" + module.getCacheName() + "/" + entryName);
-            if (!cacheFile.exists() || shouldRefreshSourceCache(cacheFile, entry)) {
-                if (!cacheFile.getParentFile().exists() && !cacheFile.getParentFile().mkdirs()) {
-                    throw new RuntimeException();
-                }
-                FileUtil.writeUtf8String(IoUtil.readUtf8(ZipUtil.getStream(zipFile, entry)), cacheFile);
-            }
-            return cacheFile;
+            cacheSourceContent(point, entryName, IoUtil.readUtf8(ZipUtil.getStream(zipFile, entry)));
+            return null;
         }
         return null;
     }
@@ -445,8 +445,6 @@ public class Index extends JSONSupport implements Closeable {
         IncompleteType type;
     }
 
-    @Getter
-    @Setter
     private class IncompleteType {
         private final IndexPoint source;
         private final String typeName;
@@ -469,6 +467,49 @@ public class Index extends JSONSupport implements Closeable {
 
     private IncompleteType createIncompleteType(IndexPoint source, CompilationUnit unit, String original) {
         return new IncompleteType(source, original, unit);
+    }
+
+    private File resolveProjectSourceFile(IndexPoint point) {
+        ProjectModule projectModule = point.getPkg().getModule().getProjectModule();
+        if (projectModule == null) {
+            return null;
+        }
+        String relativePath = StrUtil.join("/", (Object[]) point.getPath()) + ".java";
+        for (File srcDir : projectModule.getSrcDirList()) {
+            File candidate = new File(srcDir, relativePath);
+            if (candidate.exists()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    @SneakyThrows
+    public IndexPoint resolveIndexPointByFile(File file) {
+        if (file == null) {
+            return null;
+        }
+
+        File canonicalFile = file.getCanonicalFile();
+        for (File srcDir : editor.getProjectModel().getSrcDirList()) {
+            File canonicalSrcDir = srcDir.getCanonicalFile();
+            if (!canonicalFile.toPath().startsWith(canonicalSrcDir.toPath())) {
+                continue;
+            }
+            String relativePath = canonicalSrcDir.toPath().relativize(canonicalFile.toPath()).toString()
+                .replace("\\", "/");
+            if (!relativePath.endsWith(".java")) {
+                continue;
+            }
+            String[] path = relativePath.substring(0, relativePath.length() - ".java".length()).split("/");
+            Module module = JavaUtil.resolveModuleByPath(this, path);
+            if (module == null) {
+                continue;
+            }
+            return module.getPoint(path);
+        }
+
+        return null;
     }
 
     @Override
@@ -601,9 +642,28 @@ public class Index extends JSONSupport implements Closeable {
                StrUtil.join(".", (Object[]) componentType.getPath()) + "[]";
     }
 
-    private boolean shouldRefreshSourceCache(File cacheFile, ZipEntry entry) {
-        long expectedSize = entry.getSize();
-        return expectedSize >= 0 && cacheFile.length() != expectedSize;
+    public String getCachedSourceContent(IndexPoint point) {
+        return sourceContentCacheMap.get(point);
+    }
+
+    public String getCachedSourceDisplayName(IndexPoint point) {
+        return sourceDisplayNameCacheMap.get(point);
+    }
+
+    private void cacheSourceContent(IndexPoint point, String entryName, String content) {
+        sourceContentCacheMap.put(point, content);
+        sourceDisplayNameCacheMap.put(point, entryName.substring(entryName.lastIndexOf('/') + 1));
+    }
+
+    public ControllableFile openCachedSourceFile(IndexPoint point) {
+        String content = getCachedSourceContent(point);
+        String displayName = getCachedSourceDisplayName(point);
+        if (content == null || displayName == null) {
+            throw new IllegalArgumentException();
+        }
+        ControllableFile controllableFile = new ControllableFile(displayName, content);
+        editor.getOpenedFileList().add(controllableFile);
+        return controllableFile;
     }
 
     private IndexPoint resolveJavaLangObjectType() {

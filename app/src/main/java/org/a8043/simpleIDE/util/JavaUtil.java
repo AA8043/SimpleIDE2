@@ -206,12 +206,20 @@ public class JavaUtil {
     }
 
     public static int getPosition(Position pos, String text) {
+        if (text.isEmpty()) {
+            return 0;
+        }
         String[] lines = text.split("\n", -1);
+        int targetLine = Math.max(1, pos.line);
+        if (targetLine > lines.length) {
+            return text.length();
+        }
         int position = 0;
-        for (int i = 0; i < pos.line - 1; i++) {
+        for (int i = 0; i < targetLine - 1; i++) {
             position += lines[i].length() + 1;
         }
-        position += pos.column - 1;
+        int targetColumn = Math.max(1, pos.column);
+        position += Math.min(targetColumn - 1, lines[targetLine - 1].length());
         return Math.min(position, text.length());
     }
 

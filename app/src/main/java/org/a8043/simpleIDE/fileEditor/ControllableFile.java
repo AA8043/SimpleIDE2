@@ -9,14 +9,23 @@ import java.io.File;
 
 @AllArgsConstructor
 @Getter
-@Setter
 public class ControllableFile {
-    private File file;
+    private final File file;
+    @Setter
     private String content;
-    private boolean readOnly;
+    private final boolean readOnly;
+    private final String name;
+
+    public ControllableFile(File file, String content, boolean readOnly) {
+        this(file, content, readOnly, file.getName());
+    }
+
+    public ControllableFile(String name, String content) {
+        this(null, content, true, name);
+    }
 
     public String read() {
-        if (file != null) {
+        if (file != null && file.exists()) {
             setContent(FileUtil.readUtf8String(file));
         }
         return content;

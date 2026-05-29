@@ -45,7 +45,7 @@ public class JavaFile extends FileEditor {
 
     private static IndexPoint resolveIndexPoint(ControllableFile file, ProjectEditor editor) {
         File sourceFile = file.getFile();
-        IndexPoint resolved = editor.resolveIndexPointByFile(sourceFile);
+        IndexPoint resolved = editor.getIndex().resolveIndexPointByFile(sourceFile);
         if (resolved != null) {
             return resolved;
         }
@@ -62,39 +62,8 @@ public class JavaFile extends FileEditor {
             .orElse(new String[0]);
         String[] path = ArrayUtil.addAll(packagePath, new String[]{typeName});
 
-        String moduleCacheName = resolveSourceCacheModuleName(sourceFile, editor);
-        if (moduleCacheName != null) {
-            Module sourceModule =
-                editor.getIndex().getModuleByCacheName(moduleCacheName);
-            if (sourceModule != null) {
-                IndexPoint point = sourceModule.getPoint(path);
-                if (point != null) {
-                    return point;
-                }
-            }
-        }
-
         Module module = JavaUtil.resolveModuleByPath(editor.getIndex(), path);
         return module != null ? module.getPoint(path) : null;
-    }
-
-    private static String resolveSourceCacheModuleName(File file, ProjectEditor editor) {
-        if (file == null) {
-            return null;
-        }
-        try {
-            File sourceCacheDir = new File(editor.getConfigDir(), "source-cache").getCanonicalFile();
-            File canonicalFile = file.getCanonicalFile();
-            if (!canonicalFile.toPath().startsWith(sourceCacheDir.toPath())) {
-                return null;
-            }
-            String relativePath = sourceCacheDir.toPath().relativize(canonicalFile.toPath()).toString()
-                .replace("\\", "/");
-            int separatorIndex = relativePath.indexOf("/");
-            return separatorIndex >= 0 ? relativePath.substring(0, separatorIndex) : null;
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     @Override
@@ -142,15 +111,13 @@ public class JavaFile extends FileEditor {
             .orElse(new String[0]);
         String[] path = ArrayUtil.addAll(packagePath, new String[]{typeName});
 
-        String moduleCacheName = resolveSourceCacheModuleName(sourceFile, editor);
-        if (moduleCacheName != null) {
-            Module sourceModule = editor.getIndex().getModuleByCacheName(moduleCacheName);
-            if (sourceModule != null) {
-                return new IndexTarget(sourceModule, path);
-            }
+        IndexPoint existingPoint = editor.getIndex().resolveIndexPointByFile(sourceFile);
+        Module module = existingPoint != null ? existingPoint.getPkg().getModule() : null;
+        if (module != null) {
+            return new IndexTarget(module, path);
         }
 
-        Module module = resolveProjectModule(sourceFile, editor);
+        module = resolveProjectModule(sourceFile, editor);
         if (module != null) {
             return new IndexTarget(module, path);
         }
@@ -219,6 +186,7 @@ public class JavaFile extends FileEditor {
     @Getter
     public static class SourceLocation {
         private final File file;
+        private final IndexPoint point;
         private final int position;
     }
 

@@ -22,6 +22,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.project.ProjectEditor;
+import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.Runner;
 import org.a8043.simpleIDE.resource.ResourceManager;
@@ -276,6 +277,23 @@ public class ProjectView {
             .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab && file.equals(fileTab.getFile()))
             .findFirst().orElseGet(() -> {
                 Tab newTab = FileTab.createTab(editor, file);
+                editorTabPane.getTabs().add(newTab);
+                return newTab;
+            });
+        editorTabPane.getSelectionModel().select(tab);
+        if (tab instanceof FileTab.FileTabTab fileTab && fileTab.getController() != null) {
+            fileTab.getController().navigateTo(caretPosition);
+        }
+    }
+
+    public void openCachedSourceFile(IndexPoint point, int caretPosition) {
+        if (point == null) {
+            return;
+        }
+        Tab tab = editorTabPane.getTabs().stream()
+            .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab && point.equals(fileTab.getPoint()))
+            .findFirst().orElseGet(() -> {
+                Tab newTab = FileTab.createCachedSourceTab(editor, point);
                 editorTabPane.getTabs().add(newTab);
                 return newTab;
             });
