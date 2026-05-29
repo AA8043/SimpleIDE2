@@ -58,8 +58,16 @@ public class JavaUtil {
             TypeDeclaration<?> declaration = unit.getTypes().stream().filter(type -> type.getNameAsString().equals(name))
                 .findFirst().orElse(null);
             if (declaration != null) {
-                // TODO: 内部类
-                return null;
+                Module module = source.getPkg() != null ? source.getPkg().getModule() : null;
+                if (module != null) {
+                    IndexPoint point = module.getPoint(buildTypePath(unit, declaration));
+                    if (point != null) {
+                        return point;
+                    }
+                }
+                if (Objects.equals(source.getName(), declaration.getNameAsString())) {
+                    return source;
+                }
             }
         }
 
@@ -273,6 +281,12 @@ public class JavaUtil {
             }
         }
         return builder.toString();
+    }
+
+    private static String[] buildTypePath(CompilationUnit unit, TypeDeclaration<?> declaration) {
+        String[] packagePath = unit.getPackageDeclaration().map(pkg -> pkg.getNameAsString().split("\\."))
+            .orElse(new String[0]);
+        return ArrayUtil.addAll(packagePath, new String[]{declaration.getNameAsString()});
     }
 
     private static IndexPoint resolveDeclaredType(Index index, IndexPoint source, String typeName, CompilationUnit unit) {
