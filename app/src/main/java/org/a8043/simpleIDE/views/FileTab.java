@@ -59,7 +59,7 @@ public class FileTab {
     private static final List<ToolFactory> TOOL_LIST = new ArrayList<>();
 
     public interface FileEditorFactory {
-        FileEditor create(ControllableFile file, ProjectEditor editor) throws Exception;
+        FileEditor create(ControllableFile file, ProjectEditor editor, FileTab fileTab) throws Exception;
     }
 
     public interface ToolFactory {
@@ -67,8 +67,9 @@ public class FileTab {
     }
 
     static {
-        registerFileType("*", DefaultFile::new);
-        registerFileType("java", JavaFile::new);
+        registerFileType("*", (file, editor, fileTab) -> new DefaultFile(file, editor));
+        registerFileType("java", (file, editor, fileTab) -> new JavaFile(file, editor));
+        registerFileType("xml", XmlFile::new);
         registerTool(tab -> new Button("hi"));
     }
 
@@ -103,13 +104,13 @@ public class FileTab {
         boolean isFailedToOpen;
         try {
             fileEditor = FILE_TYPE_MAP.getOrDefault(fileType, FILE_TYPE_MAP.get("*"))
-                .create(controllableFile, editor);
+                .create(controllableFile, editor, this);
             isFailedToOpen = false;
         } catch (Exception e) {
             log.error(e.getMessage(), e);
             isFailedToOpen = true;
             try {
-                fileEditor = FILE_TYPE_MAP.get("*").create(controllableFile, editor);
+                fileEditor = FILE_TYPE_MAP.get("*").create(controllableFile, editor, this);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -248,15 +249,17 @@ public class FileTab {
         codeArea.replaceText(fileEditor.getFile().read());
         codeArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
             AtomicBoolean showed = new AtomicBoolean(false);
+            AtomicReference<Label> label = new AtomicReference<>();
             fileEditor.getProblemList().forEach(error -> {
                 if (error.getStart() <= newPos && newPos <= error.getEnd()) {
-                    Label label = new Label(error.getMessage());
-                    label.setWrapText(true);
-                    showTip(label);
+                    label.set(new Label(error.getMessage()));
+                    label.get().setWrapText(true);
+                    showTip(label.get());
                     showed.set(true);
                 }
             });
-            if (!showed.get()) {
+            if (!showed.get() && !tipBox.getChildren().isEmpty() &&
+                tipBox.getChildren().getFirst().equals(label.get())) {
                 closeTip();
             }
         });
@@ -336,8 +339,10 @@ public class FileTab {
         }).subscribe(ch -> {
             int caretPosition = codeArea.getCaretPosition();
             if (count.get() > 1 && nowCompleteBox.get() == null) {
-                List<CompleteItem> completeItemList =
-                    fileEditor.computeCompletion(caretPosition);
+                List<CompleteItem> completeItemList = fileEditor.computeCompletion(caretPosition);
+                if (completeItemList.isEmpty()) {
+                    return;
+                }
                 Bounds bounds = codeArea.localToScreen(codeArea.getCaretBounds().orElseThrow());
                 CompleteBox completeBox = new CompleteBox(completeItemList, caretPosition);
                 nowCompleteBox.set(Main.instance.showModal(null, completeBox, 650, 300,
@@ -454,14 +459,18 @@ public class FileTab {
 
     public void showTip(Node node) {
         tipBox.getChildren().setAll(node);
-        tipBox.setVisible(true);
-        new SlideInRight(tipBox).play();
+        if (!tipBox.isVisible()) {
+            tipBox.setVisible(true);
+            new SlideInRight(tipBox).play();
+        }
     }
 
     public void closeTip() {
-        SlideOutRight slide = new SlideOutRight(tipBox);
-        slide.setOnFinished(e -> tipBox.setVisible(false));
-        slide.play();
+        if (tipBox.isVisible()) {
+            SlideOutRight slide = new SlideOutRight(tipBox);
+            slide.setOnFinished(e -> tipBox.setVisible(false));
+            slide.play();
+        }
     }
 
     private Node currentToolNode;

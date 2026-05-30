@@ -389,6 +389,19 @@ public class Index extends JSONSupport implements Closeable {
         isIndexed = true;
     }
 
+    public void reindexAll(Consumer<Integer> afterStatistics, Runnable afterIndexOne,
+                           Runnable afterIndexAll, Consumer<Exception> onException) {
+        moduleList.clear();
+        moduleList.addAll(List.of(new Module(this), new Module(this)));
+        indexList.clear();
+        dependencyZipMap.clear();
+        sourceContentCacheMap.clear();
+        sourceDisplayNameCacheMap.clear();
+        arrayTypeMap.clear();
+        arrayComponentTypeMap.clear();
+        indexAll(afterStatistics, afterIndexOne, afterIndexAll, onException);
+    }
+
     @SneakyThrows
     @Override
     public void close() {

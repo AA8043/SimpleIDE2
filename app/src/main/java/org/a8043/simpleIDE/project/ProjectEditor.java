@@ -173,6 +173,10 @@ public class ProjectEditor implements Closeable {
         return javaParserThreadLocal.get();
     }
 
+    public void sync() {
+        projectModel = buildTool.sync(this);
+    }
+
     @SneakyThrows
     public ControllableFile openFile(File file, String content, boolean readOnly) {
         ControllableFile controllableFile = new ControllableFile(file, content, readOnly);

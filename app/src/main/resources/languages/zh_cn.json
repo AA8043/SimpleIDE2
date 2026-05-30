@@ -97,6 +97,8 @@
         "fileConvert.cover": "覆盖",
         "fileConvert.hierarchicalStructure": "层次结构",
         "fileConvert.hierarchicalDelimiter": "层分隔符",
-        "fileConvert.convert": "转换"
+        "fileConvert.convert": "转换",
+        "buildTool.scriptChangeTip": "构建脚本发生更改, 是否同步项目?",
+        "buildTool.sync": "同步"
     }
 }
