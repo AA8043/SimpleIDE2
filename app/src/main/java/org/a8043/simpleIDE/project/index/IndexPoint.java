@@ -8,6 +8,9 @@ import lombok.*;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 索引点(类)
+ */
 @Getter
 @ToString(exclude = "fieldList")
 @EqualsAndHashCode(callSuper = false)

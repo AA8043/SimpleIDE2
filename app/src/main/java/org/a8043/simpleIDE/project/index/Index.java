@@ -33,12 +33,23 @@ import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+/**
+ * 索引
+ */
 @Slf4j
 public class Index extends JSONSupport implements Closeable {
     @Getter
     private final ProjectEditor editor;
     @Getter
     private boolean isIndexed;
+    /**
+     * 模块列表<br>
+     * 固定的模块:
+     * <ol>
+     *     <li>未命名模块</li>
+     *     <li>基础类型模块</li>
+     * </ol>
+     */
     @Getter
     private final List<Module> moduleList = new CopyOnWriteArrayList<>(List.of(
         new Module(this), new Module(this)));

@@ -22,13 +22,28 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+/**
+ * 文件工具类
+ */
 public class FileUtil {
     private static final Map<String, Image> FILE_IMAGE_CACHE = new HashMap<>();
 
+    /**
+     * 获取相对路径
+     * @param base 基础目录
+     * @param full 完整路径
+     * @return 相对路径
+     */
     public static String getRelativePath(File base, File full) {
         return base.toPath().relativize(full.toPath()).toString().replace("\\", "/");
     }
 
+    /**
+     * 在多个目录中查找文件所在的目录
+     * @param srcDirList 目录列表
+     * @param name 文件名
+     * @return 文件所在的目录, 如果没有找到则返回null
+     */
     public static File findFileDirInFolders(List<File> srcDirList, String name) {
         AtomicReference<File> result = new AtomicReference<>();
         srcDirList.forEach(dir -> cn.hutool.core.io.FileUtil.walkFiles(dir, file -> {
@@ -39,6 +54,11 @@ public class FileUtil {
         return result.get();
     }
 
+    /**
+     * 获取文件图标
+     * @param file 文件
+     * @return 文件图标
+     */
     public static Image getImage(File file) {
         String suffix = cn.hutool.core.io.FileUtil.getSuffix(file);
         if (FILE_IMAGE_CACHE.containsKey(suffix)) {
@@ -63,6 +83,13 @@ public class FileUtil {
         }
     }
 
+    /**
+     * 获取文件图标的ImageView
+     * @param file 文件
+     * @param width 图标宽度
+     * @param height 图标高度
+     * @return 文件图标的ImageView
+     */
     public static ImageView getImageView(File file, int width, int height) {
         ImageView imageView = new ImageView(getImage(file));
         imageView.setFitWidth(width);
@@ -70,6 +97,11 @@ public class FileUtil {
         return imageView;
     }
 
+    /**
+     * 获取显示文件的HBox
+     * @param file 文件
+     * @return 显示文件的HBox
+     */
     public static HBox getDisplayItem(File file) {
         return new HBox(getImageView(file, 16, 16), new Label(file.getName()) {{
             if (file.isFile()) {
@@ -93,6 +125,12 @@ public class FileUtil {
 
     private static final List<WatchMonitor> WATCH_MONITOR_LIST = new ArrayList<>();
 
+    /**
+     * 监听文件变化
+     * @param file 监听的文件
+     * @param watcher 监听器
+     * @param events 监听的事件类型
+     */
     public static void watch(File file, Watcher watcher, WatchEvent.Kind<?>... events) {
         WatchMonitor watchMonitor = WatchUtil.create(file, events);
         WATCH_MONITOR_LIST.add(watchMonitor);
@@ -100,6 +138,9 @@ public class FileUtil {
         watchMonitor.start();
     }
 
+    /**
+     * 关闭
+     */
     public static void close() {
         WATCH_MONITOR_LIST.forEach(WatchMonitor::close);
     }

@@ -7,7 +7,18 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 搜索工具类
+ */
 public class SearchUtil {
+    /**
+     * 搜索
+     * @param list 待搜索的列表
+     * @param toStringFunc 将对象转换为字符串的函数
+     * @param keyword 搜索关键词
+     * @return 搜索结果
+     * @param <T> 搜索对象类型
+     */
     public static <T> List<T> search(List<T> list, Function<T, String> toStringFunc, String keyword) {
         if (list == null || keyword == null || keyword.trim().isEmpty()) {
             return list != null ? new ArrayList<>(list) : new ArrayList<>();

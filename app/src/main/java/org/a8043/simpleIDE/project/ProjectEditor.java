@@ -30,27 +30,69 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.*;
 
+/**
+ * 项目编辑器
+ */
 @Slf4j
 @Getter
 public class ProjectEditor implements Closeable {
+    /**
+     * 打开了的项目编辑器列表
+     */
     public static final List<ProjectEditor> OPENED_LIST = new ArrayList<>();
+    /**
+     * 项目
+     */
     private final Project project;
+    /**
+     * JDK
+     */
     private final Jdk jdk;
+    /**
+     * 索引
+     */
     private final Index index;
     private final File indexCacheFile;
+    /**
+     * 项目模型
+     */
     private ProjectModel projectModel;
     private final ThreadLocal<JavaParser> javaParserThreadLocal;
     private final File configDir;
     private final File configFile;
     private final File recordFile;
     private final File modelFile;
+    /**
+     * 构建工具
+     */
     private final BuildTool buildTool;
+    /**
+     * editor.json
+     */
     private final ProjectConfig config;
+    /**
+     * record.json
+     */
     private final JSONObject record;
+    /**
+     * 可运行列表
+     */
     private final ObservableList<RunnableTask> runnableList = FXCollections.observableArrayList();
+    /**
+     * 打开的文件列表
+     */
     private final List<ControllableFile> openedFileList = new ArrayList<>();
+    /**
+     * 自动保存线程
+     */
     private final Thread autoSaveThread;
+    /**
+     * 任务列表
+     */
     private final ObservableList<Task<?>> taskList = FXCollections.observableArrayList();
+    /**
+     * 任务线程池
+     */
     private final ExecutorService taskThreadPool = new ThreadPoolExecutor(5, 5,
         60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(10), Executors.defaultThreadFactory(),
         new ThreadPoolExecutor.AbortPolicy());

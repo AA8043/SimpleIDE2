@@ -13,6 +13,9 @@ import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
+/**
+ * 构建工具
+ */
 public abstract class BuildTool {
     @Getter(AccessLevel.PROTECTED)
     ProjectEditor editor;
@@ -21,6 +24,11 @@ public abstract class BuildTool {
         this.editor = editor;
     }
 
+    /**
+     * 创建项目模型
+     * @param editor 项目编辑器
+     * @return 项目模型
+     */
     public abstract ProjectModel sync(ProjectEditor editor);
 
     protected static List<ProjectModule> getJdkModuleList(ProjectEditor editor) {
@@ -36,7 +44,16 @@ public abstract class BuildTool {
         }).filter(Objects::nonNull).toList();
     }
 
+    /**
+     * 编译
+     * @param onOutput 输出回调
+     * @return 编译结果Future
+     */
     public abstract Future<Integer> compile(Consumer<String> onOutput);
 
+    /**
+     * 获取运行时类路径列表
+     * @return 运行时类路径列表
+     */
     public abstract List<File> getRuntimeClasspathList();
 }

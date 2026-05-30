@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * 构建工具类型
+ */
 public abstract class BuildToolType {
     public static final Maven.MavenType MAVEN = new Maven.MavenType();
     public static final Gradle.GradleType GRADLE = new Gradle.GradleType();
@@ -34,6 +37,10 @@ public abstract class BuildToolType {
         });
     }
 
+    /**
+     * 注册构建工具类型
+     * @param type 构建工具类型
+     */
     public static void register(BuildToolType type) {
         TYPE_LIST.add(type);
     }
@@ -48,16 +55,46 @@ public abstract class BuildToolType {
         return name != null ? name : (name = name());
     }
 
+    /**
+     * 获取构建工具名称
+     * @return 构建工具名称
+     */
     protected abstract String name();
 
+    /**
+     * 获取项目模型类型
+     * @return 项目模型类型
+     */
     public abstract Class<? extends ProjectModel> getModelType();
 
+    /**
+     * 生成构建脚本
+     * @param project 项目
+     * @param jdk JDK
+     * @param groupId GroupId
+     * @param artifactId ArtifactId
+     */
     public abstract void generateBuildScript(Project project, Jdk jdk, String groupId, String artifactId);
 
+    /**
+     * 创建构建工具
+     * @param editor 项目编辑器
+     * @return 构建工具
+     */
     public abstract BuildTool newBuildTool(ProjectEditor editor);
 
+    /**
+     * 判断项目是否使用此构建工具
+     * @param project 项目
+     * @return 是否使用此构建工具
+     */
     public abstract boolean isUseThis(Project project);
 
+    /**
+     * 识别构建工具
+     * @param project 项目
+     * @return 构建工具
+     */
     public static BuildToolType recognition(Project project) {
         return TYPE_LIST.stream().filter(type -> type.isUseThis(project)).findFirst().orElse(UNKNOWN);
     }

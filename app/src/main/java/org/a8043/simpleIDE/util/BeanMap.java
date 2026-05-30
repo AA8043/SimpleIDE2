@@ -6,6 +6,9 @@ import lombok.Getter;
 import java.lang.reflect.Field;
 import java.util.*;
 
+/**
+ * 将一个JavaBean包装成一个Map
+ */
 public class BeanMap extends AbstractMap<String, Object> {
     @Getter
     private final Object bean;
