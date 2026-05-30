@@ -37,7 +37,7 @@ public class JavaFile extends FileEditor {
         diagnosticService = new JavaDiagnosticService(editor, state);
         highlightService = new JavaHighlightService(state);
         completionService = new JavaCompletionService(editor, state, this::getContent, typeResolver);
-        hoverService = new JavaHoverService(editor, state, this::getContent, () -> getFile().getFile(), typeResolver);
+        hoverService = new JavaHoverService(editor, state, this::getContent, this::getFile, typeResolver);
         if (diagnosticService.analyze(getContent())) {
             synchronizeIndexPoint();
         }
@@ -185,7 +185,7 @@ public class JavaFile extends FileEditor {
     @AllArgsConstructor
     @Getter
     public static class SourceLocation {
-        private final File file;
+        private final ControllableFile file;
         private final IndexPoint point;
         private final int position;
     }

@@ -21,6 +21,7 @@ import javafx.util.Callback;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
+import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
@@ -269,12 +270,13 @@ public class ProjectView {
         fileTreeView.setRoot(root);
     }
 
-    public void openFile(File file, int caretPosition) {
+    public void openFile(ControllableFile file, int caretPosition) {
         if (file == null) {
             return;
         }
         Tab tab = editorTabPane.getTabs().stream()
-            .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab && file.equals(fileTab.getFile()))
+            .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab &&
+                                   Objects.equals(file.getFile(), fileTab.getFile().getFile()))
             .findFirst().orElseGet(() -> {
                 Tab newTab = FileTab.createTab(editor, file);
                 editorTabPane.getTabs().add(newTab);
@@ -351,10 +353,8 @@ public class ProjectView {
             TreeItem<File> selectedItem = fileTreeView.getSelectionModel().getSelectedItem();
             if (selectedItem != null) {
                 File file = selectedItem.getValue();
-                if (file.isFile() &&
-                    editorTabPane.getTabs().stream().noneMatch(tab ->
-                        tab instanceof FileTab.FileTabTab fileTab && file.equals(fileTab.getFile()))) {
-                    editorTabPane.getTabs().add(FileTab.createTab(editor, file));
+                if (file.isFile()) {
+                    openFile(editor.openFile(file, null, false), 0);
                 }
             }
         }
@@ -420,7 +420,8 @@ public class ProjectView {
             }));
             listView.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
                 if (newTab instanceof FileTab.FileTabTab fileTab) {
-                    pathLabel.setText(fileTab.getFile().getAbsolutePath());
+                    pathLabel.setText(fileTab.getFile().getFile() != null ?
+                        fileTab.getFile().getFile().getAbsolutePath() : fileTab.getFile().getName());
                 } else {
                     pathLabel.setText("");
                 }

@@ -99,39 +99,6 @@ public class Index extends JSONSupport implements Closeable {
         return result.getResult().orElse(null);
     }
 
-    public File resolveSourceFile(IndexPoint point) {
-        if (point == null || point.getPkg() == null || point.getPkg().getModule() == null) {
-            return null;
-        }
-
-        Module module = point.getPkg().getModule();
-        ProjectModule projectModule = module.getProjectModule();
-        if (projectModule == null) {
-            return null;
-        }
-
-        String relativePath = StrUtil.join("/", (Object[]) point.getPath()) + ".java";
-        if (projectModule.getLocation() == ProjectModule.Location.PROJECT) {
-            return resolveProjectSourceFile(point);
-        }
-
-        ZipFile zipFile = projectModule.getLocation() == ProjectModule.Location.JDK ? standardLibraryZip :
-            resolveDependencyZip(module);
-        if (zipFile == null) {
-            return null;
-        }
-
-        for (String entryName : List.of(projectModule.getName() + "/" + relativePath, relativePath)) {
-            ZipEntry entry = zipFile.getEntry(entryName);
-            if (entry == null) {
-                continue;
-            }
-            cacheSourceContent(point, entryName, IoUtil.readUtf8(ZipUtil.getStream(zipFile, entry)));
-            return null;
-        }
-        return null;
-    }
-
     public synchronized IndexPoint getOrCreateArrayType(IndexPoint componentType) {
         if (componentType == null) {
             return null;
@@ -144,7 +111,8 @@ public class Index extends JSONSupport implements Closeable {
 
         IndexPoint arrayType = new IndexPoint(componentType.getName() + "[]", componentType.getPkg(),
             resolveJavaLangObjectType(), this);
-        arrayType.getFieldList().add(new FieldSignature("length", Access.PUBLIC, false, basicTypeMap.get("int")));
+        arrayType.getFieldList().add(new FieldSignature("length",
+            Access.PUBLIC, false, basicTypeMap.get("int")));
         arrayTypeMap.put(key, arrayType);
         arrayComponentTypeMap.put(arrayType, componentType);
         return arrayType;
@@ -193,6 +161,15 @@ public class Index extends JSONSupport implements Closeable {
             return null;
         }
 
+        ParseResult<CompilationUnit> result = editor.getJavaParser().parse(resolveSourceFile(point).getContent());
+        return result.getResult().orElse(null);
+    }
+
+    public ControllableFile resolveSourceFile(IndexPoint point) {
+        if (point == null || point.getPkg() == null || point.getPkg().getModule() == null) {
+            return null;
+        }
+
         Module module = point.getPkg().getModule();
         StringBuilder pathBuilder = new StringBuilder();
         pathBuilder.append(module.getProjectModule().getName()).append("/");
@@ -217,10 +194,7 @@ public class Index extends JSONSupport implements Closeable {
             Dependency dependency = equalsModuleDependencyList.getFirst();
             // TODO: 获取类
         }
-
-        String content = IoUtil.readUtf8(ZipUtil.getStream(zipFile, zipEntry));
-        ParseResult<CompilationUnit> result = editor.getJavaParser().parse(content);
-        return result.getResult().orElse(null);
+        return new ControllableFile(pathBuilder.toString(), IoUtil.readUtf8(ZipUtil.getStream(zipFile, zipEntry)));
     }
 
     public IndexPoint index(Module module, String[] path, String content) {
@@ -344,7 +318,7 @@ public class Index extends JSONSupport implements Closeable {
             }
         });
         editor.getProjectModel().getDependencyList().forEach(dependency ->
-            dependencyZipMap.put(dependency, dependency.getSourceZip().waitFor()));
+            dependencyZipMap.put(dependency, dependency.getSourceZip()));
 
         List<MethodIndexTemp> methodTempList = new ArrayList<>();
         List<FieldIndexTemp> fieldTempList = new ArrayList<>();

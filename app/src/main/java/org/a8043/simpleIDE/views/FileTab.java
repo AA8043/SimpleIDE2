@@ -43,7 +43,6 @@ import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.richtext.LineNumberFactory;
 import org.markdown4j.Markdown4jProcessor;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
@@ -98,10 +97,6 @@ public class FileTab {
     private final HBox searchBox = new HBox();
     private final AtomicReference<Main.ModalController<CompleteBox>> nowCompleteBox = new AtomicReference<>();
 
-    private FileTab(ProjectEditor editor, File file, String content, String fileType) {
-        this(editor, editor.openFile(file, content, false), fileType);
-    }
-
     private FileTab(ProjectEditor editor, ControllableFile controllableFile, String fileType) {
         this.editor = editor;
         FileEditor fileEditor;
@@ -124,10 +119,13 @@ public class FileTab {
     }
 
     @SneakyThrows
-    public static Tab createTab(ProjectEditor editor, File file) {
+    public static Tab createTab(ProjectEditor editor, ControllableFile file) {
+        ControllableFile controllableFile = file.getFile() != null ?
+            editor.openFile(file.getFile(), file.getContent(), file.isReadOnly()) : file;
         FXMLLoader fxmlLoader = new FXMLLoader(FXML_URL);
-        fxmlLoader.setControllerFactory(param -> new FileTab(editor, file, null, FileUtil.getSuffix(file)));
-        return new FileTabTab(file, fxmlLoader.load(), fxmlLoader.getController());
+        fxmlLoader.setControllerFactory(param ->
+            new FileTab(editor, controllableFile, FileUtil.getSuffix(controllableFile.getName())));
+        return new FileTabTab(controllableFile, fxmlLoader.load(), fxmlLoader.getController());
     }
 
     @SneakyThrows
@@ -541,13 +539,13 @@ public class FileTab {
 
     @Getter
     public static class FileTabTab extends Tab {
-        private final File file;
+        private final ControllableFile file;
         private final IndexPoint point;
         private final String name;
         @Getter
         private final FileTab controller;
 
-        public FileTabTab(File file, Node node, FileTab tab) {
+        public FileTabTab(ControllableFile file, Node node, FileTab tab) {
             this(file, null, file.getName(), node, tab);
         }
 
@@ -555,13 +553,14 @@ public class FileTab {
             this(null, point, name, node, tab);
         }
 
-        private FileTabTab(File file, IndexPoint point, String name, Node node, FileTab tab) {
+        private FileTabTab(ControllableFile file, IndexPoint point, String name, Node node, FileTab tab) {
             super(null, node);
             this.file = file;
             this.point = point;
             this.name = name;
             controller = tab;
-            setGraphic(file != null ? org.a8043.simpleIDE.util.FileUtil.getDisplayItem(file) : new Label(name));
+            setGraphic(file != null && file.getFile() != null ?
+                org.a8043.simpleIDE.util.FileUtil.getDisplayItem(file.getFile()) : new Label(name));
             setOnClosed(e -> tab.editor.closeFile(tab.fileEditor.getFile()));
         }
     }

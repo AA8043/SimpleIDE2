@@ -134,7 +134,16 @@ public class ProjectEditor implements Closeable {
     @SneakyThrows
     public ControllableFile openFile(File file, String content, boolean readOnly) {
         ControllableFile controllableFile = new ControllableFile(file, content, readOnly);
-        controllableFile.read();
+        if (content == null) {
+            controllableFile.read();
+        }
+        openedFileList.add(controllableFile);
+        return controllableFile;
+    }
+
+    @SneakyThrows
+    public ControllableFile openFile(String name, String content) {
+        ControllableFile controllableFile = new ControllableFile(name, content);
         openedFileList.add(controllableFile);
         return controllableFile;
     }

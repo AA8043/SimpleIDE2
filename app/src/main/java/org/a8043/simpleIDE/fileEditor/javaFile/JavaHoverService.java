@@ -1,6 +1,5 @@
 package org.a8043.simpleIDE.fileEditor.javaFile;
 
-import cn.hutool.core.io.FileUtil;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Modifier;
@@ -11,6 +10,7 @@ import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.github.javaparser.javadoc.Javadoc;
+import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.Access;
 import org.a8043.simpleIDE.project.index.FieldSignature;
@@ -18,7 +18,6 @@ import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.index.MethodSignature;
 import org.a8043.simpleIDE.util.JavaUtil;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,11 +29,12 @@ public class JavaHoverService {
     private final ProjectEditor editor;
     private final JavaFileState state;
     private final Supplier<String> contentSupplier;
-    private final Supplier<File> fileSupplier;
+    private final Supplier<ControllableFile> fileSupplier;
+    ;
     private final JavaTypeResolver typeResolver;
 
     public JavaHoverService(ProjectEditor editor, JavaFileState state, Supplier<String> contentSupplier,
-                            Supplier<File> fileSupplier, JavaTypeResolver typeResolver) {
+                            Supplier<ControllableFile> fileSupplier, JavaTypeResolver typeResolver) {
         this.editor = editor;
         this.state = state;
         this.contentSupplier = contentSupplier;
@@ -120,8 +120,8 @@ public class JavaHoverService {
                 MethodDeclaration declaration = sourceUnit != null ?
                     typeResolver.resolveMethodDeclaration(sourceUnit, n, compilationUnit) : null;
                 if (declaration != null) {
-                    File file = resolveSourceFile(ownerType);
-                    sourceLocation.set(createLocation(file, ownerType, declaration, readContent(file, ownerType)));
+                    ControllableFile file = resolveSourceFile(ownerType);
+                    sourceLocation.set(createLocation(file, ownerType, declaration, file.getContent()));
                 }
             }
 
@@ -139,12 +139,13 @@ public class JavaHoverService {
                     typeResolver.resolveFieldLookup(typeResolver.resolveExpressionType(n.getScope(), compilationUnit),
                         n.getNameAsString());
                 if (fieldLookup != null) {
-                    File file = resolveSourceFile(fieldLookup.owner());
+                    ControllableFile file = resolveSourceFile(fieldLookup.owner());
+                    ;
                     VariableDeclarator fieldVariable = typeResolver.resolveFieldVariable(fieldLookup.owner(),
                         n.getNameAsString());
                     if (fieldVariable != null) {
                         sourceLocation.set(createLocation(file, fieldLookup.owner(), fieldVariable,
-                            readContent(file, fieldLookup.owner())));
+                            file.getContent()));
                     }
                 }
             }
@@ -174,12 +175,13 @@ public class JavaHoverService {
                 JavaTypeResolver.JavaFieldLookup fieldLookup = typeResolver.resolveFieldLookup(state.getIndexPoint(),
                     n.getNameAsString());
                 if (fieldLookup != null) {
-                    File file = resolveSourceFile(fieldLookup.owner());
+                    ControllableFile file = resolveSourceFile(fieldLookup.owner());
+                    ;
                     VariableDeclarator fieldVariable = typeResolver.resolveFieldVariable(fieldLookup.owner(),
                         n.getNameAsString());
                     if (fieldVariable != null) {
                         sourceLocation.set(createLocation(file, fieldLookup.owner(), fieldVariable,
-                            readContent(file, fieldLookup.owner())));
+                            file.getContent()));
                         return;
                     }
                 }
@@ -187,8 +189,8 @@ public class JavaHoverService {
                 if (typePoint != null) {
                     ClassOrInterfaceDeclaration declaration = typeResolver.resolveTypeDeclaration(typePoint);
                     if (declaration != null) {
-                        File file = resolveSourceFile(typePoint);
-                        sourceLocation.set(createLocation(file, typePoint, declaration, readContent(file, typePoint)));
+                        ControllableFile file = resolveSourceFile(typePoint);
+                        sourceLocation.set(createLocation(file, typePoint, declaration, file.getContent()));
                     }
                 }
             }
@@ -223,8 +225,9 @@ public class JavaHoverService {
                 if (typePoint != null) {
                     ClassOrInterfaceDeclaration declaration = typeResolver.resolveTypeDeclaration(typePoint);
                     if (declaration != null) {
-                        File file = resolveSourceFile(typePoint);
-                        sourceLocation.set(createLocation(file, typePoint, declaration, readContent(file, typePoint)));
+                        ControllableFile file = resolveSourceFile(typePoint);
+                        ;
+                        sourceLocation.set(createLocation(file, typePoint, declaration, file.getContent()));
                     }
                 }
             }
@@ -666,30 +669,20 @@ public class JavaHoverService {
         return contentSupplier.get();
     }
 
-    private File getCurrentFile() {
+    private ControllableFile getCurrentFile() {
         return fileSupplier.get();
     }
 
-    private File resolveSourceFile(IndexPoint typePoint) {
-        File file = editor.getIndex().resolveSourceFile(typePoint);
+    private ControllableFile resolveSourceFile(IndexPoint typePoint) {
+        ControllableFile file = editor.getIndex().resolveSourceFile(typePoint);
+        ;
         if (file != null) {
             return file;
         }
         return editor.getIndex().getCachedSourceContent(typePoint) != null ? null : getCurrentFile();
     }
 
-    private String readContent(File file, IndexPoint point) {
-        if (file == null || file.equals(getCurrentFile())) {
-            return getContent();
-        }
-        String cachedContent = point != null ? editor.getIndex().getCachedSourceContent(point) : null;
-        if (cachedContent != null) {
-            return cachedContent;
-        }
-        return FileUtil.readUtf8String(file);
-    }
-
-    private JavaFile.SourceLocation createLocation(File file, IndexPoint point, Node node, String content) {
+    private JavaFile.SourceLocation createLocation(ControllableFile file, IndexPoint point, Node node, String content) {
         if (node == null) {
             return null;
         }
