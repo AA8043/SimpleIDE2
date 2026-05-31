@@ -29,6 +29,7 @@ public class JavaFile extends FileEditor {
     private final JavaHighlightService highlightService;
     private final JavaCompletionService completionService;
     private final JavaHoverService hoverService;
+    private final JavaUsageService usageService;
 
     public JavaFile(ControllableFile file, ProjectEditor editor) {
         super(file, editor);
@@ -38,6 +39,7 @@ public class JavaFile extends FileEditor {
         highlightService = new JavaHighlightService(state);
         completionService = new JavaCompletionService(editor, state, this::getContent, typeResolver);
         hoverService = new JavaHoverService(editor, state, this::getContent, this::getFile, typeResolver);
+        usageService = new JavaUsageService(editor, state, this::getContent, this::getFile, typeResolver);
         if (diagnosticService.analyze(getContent())) {
             synchronizeIndexPoint();
         }
@@ -177,6 +179,11 @@ public class JavaFile extends FileEditor {
 
     public SourceLocation resolveSourceLocation(int position) {
         return hoverService.resolveSourceLocation(position);
+    }
+
+    @Override
+    public List<Usage> findUsages(int position) {
+        return usageService.findUsages(position);
     }
 
     @Override

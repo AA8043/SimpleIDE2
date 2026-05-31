@@ -244,7 +244,6 @@ public class Index extends JSONSupport implements Closeable {
                     case JDK -> moduleInfoContent = IoUtil.readUtf8(standardLibraryZip.getInputStream(
                         standardLibraryZip.getEntry(module.getProjectModule().getName() + "/module-info.java")));
                     default -> {
-                        // TODO: 使用其他方法获取模块信息
                         return;
                     }
                 }
@@ -284,18 +283,24 @@ public class Index extends JSONSupport implements Closeable {
                     needList.add(new NeedIndex(moduleName, path, entry));
                 }
             });
-            editor.getProjectModel().getModuleList().forEach(module -> module.getSrcDirList().forEach(srcDir -> {
-                String srcPath = srcDir.getAbsolutePath().replace("\\", "/");
-                FileUtil.walkFiles(srcDir, file -> {
-                    if (file.getName().endsWith(".java")) {
-                        String filePath = file.getAbsolutePath().replace("\\", "/");
-                        String relativePath = filePath.substring(srcPath.length() + 1);
-                        String[] path = relativePath.substring(0,
-                            relativePath.length() - ".java".length()).split("/");
-                        needList.add(new NeedIndex(module.getName(), path, file));
-                    }
-                });
-            }));
+            editor.getProjectModel().getModuleList().forEach(module -> {
+                if (module.getLocation() == ProjectModule.Location.PROJECT) {
+                    module.getSrcDirList().forEach(srcDir -> {
+                        String srcPath = srcDir.getAbsolutePath().replace("\\", "/");
+                        FileUtil.walkFiles(srcDir, file -> {
+                            if (file.getName().endsWith(".java")) {
+                                String filePath = file.getAbsolutePath().replace("\\", "/");
+                                String relativePath = filePath.substring(srcPath.length() + 1);
+                                String[] path = relativePath.substring(0,
+                                    relativePath.length() - ".java".length()).split("/");
+                                needList.add(new NeedIndex(module.getName(), path, file));
+                            }
+                        });
+                    });
+                } else if (module.getLocation() == ProjectModule.Location.DEPENDENCY) {
+                    // TODO: 获取依赖的类
+                }
+            });
             int count = needList.size();
             log.debug("需要索引的数量: {}", count);
             afterStatistics.accept(count);

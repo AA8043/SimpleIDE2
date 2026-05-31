@@ -13,6 +13,7 @@ import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
@@ -182,6 +183,8 @@ public class FileTab {
                 searchField.requestFocus();
             },
             new KeyCodeCombination(KeyCode.F, KeyCodeCombination.CONTROL_DOWN), codeArea);
+        Main.instance.registerKeyBinding("findUsages", () -> findUsages(codeArea.getCaretPosition()),
+            new KeyCodeCombination(KeyCode.F7, KeyCodeCombination.ALT_DOWN), codeArea);
 
         VirtualizedScrollPane<CodeArea> codeAreaScrollPane = new VirtualizedScrollPane<>(codeArea);
         codeArea.getStylesheets().add("data:text/css," + Main.MAIN_STYLE);
@@ -527,6 +530,62 @@ public class FileTab {
         codeArea.moveTo(clampedPosition);
         codeArea.requestFollowCaret();
         codeArea.requestFocus();
+    }
+
+    private void findUsages(int position) {
+        editor.runTask(new Task<List<FileEditor.Usage>>() {
+            @Override
+            protected List<FileEditor.Usage> call() {
+                updateTitle(ResourceManager.getText("findUsages.searching"));
+                return fileEditor.findUsages(position);
+            }
+
+            @Override
+            protected void succeeded() {
+                List<FileEditor.Usage> usages = getValue();
+                if (usages == null) {
+                    return;
+                }
+                if (usages.isEmpty()) {
+                    showTemporaryTip(new Label(ResourceManager.getText("findUsages.notFound")));
+                    return;
+                }
+                showUsages(usages);
+            }
+        });
+    }
+
+    private void showUsages(List<FileEditor.Usage> usages) {
+        ListView<FileEditor.Usage> listView = new ListView<>(FXCollections.observableArrayList(usages));
+        listView.setCellFactory(Util.createListCell(usage -> {
+            Label location = new Label(usage.getFile().getName() + ":" + usage.getLine() +
+                                       (usage.getContext().isBlank() ? "" : "  " + usage.getContext()));
+            Label preview = new Label(usage.getLineText());
+            preview.getStyleClass().add("completion-description-label");
+            return new VBox(location, preview);
+        }));
+
+        Main.ModalController<ListView<FileEditor.Usage>> modal = Main.instance.showModal(
+            ResourceManager.getText("findUsages.title", usages.size()), listView, 700, 400);
+        Runnable openSelected = () -> {
+            FileEditor.Usage usage = listView.getSelectionModel().getSelectedItem();
+            if (usage == null) {
+                return;
+            }
+            ProjectView.get(editor).openFile(usage.getFile(), usage.getPosition());
+            modal.close();
+        };
+        listView.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                openSelected.run();
+            }
+        });
+        listView.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                openSelected.run();
+            }
+        });
+        listView.getSelectionModel().selectFirst();
     }
 
     @Getter

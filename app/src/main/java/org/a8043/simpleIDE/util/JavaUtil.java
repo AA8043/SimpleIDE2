@@ -24,6 +24,25 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class JavaUtil {
     /**
+     * 判断两个IndexPoint是否指向同一类型<br>
+     * 同一对象, 或同模块且路径相同则视为相同
+     *
+     * @param left 左侧类型
+     * @param right 右侧类型
+     * @return 是否为同一类型
+     */
+    public static boolean isSameType(IndexPoint left, IndexPoint right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null || left.getPkg() == null || right.getPkg() == null) {
+            return false;
+        }
+        return Objects.equals(left.getPkg().getModule().getCacheName(),
+            right.getPkg().getModule().getCacheName()) && Arrays.equals(left.getPath(), right.getPath());
+    }
+
+    /**
      * 在给定索引中查找包含指定路径的模块
      *
      * @param index 索引
