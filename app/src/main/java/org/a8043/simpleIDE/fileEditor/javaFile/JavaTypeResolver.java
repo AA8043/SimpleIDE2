@@ -190,9 +190,9 @@ public class JavaTypeResolver {
     }
 
     public VariableDeclarator resolveFieldVariable(IndexPoint owner, String fieldName) {
-        CompilationUnit sourceCompilationUnit = owner != null ? editor.getIndex().getCompilationUnit(owner) : null;
+        CompilationUnit sourceCompilationUnit = owner != null ? owner.resolveCompilationUnit() : null;
         if (sourceCompilationUnit == null) {
-            sourceCompilationUnit = owner != null ? editor.getIndex().getSourceCompilationUnit(owner) : null;
+            sourceCompilationUnit = owner != null ? owner.resolveCompilationUnit() : null;
         }
         if (sourceCompilationUnit == null) {
             return null;
@@ -205,9 +205,10 @@ public class JavaTypeResolver {
 
     public ClassOrInterfaceDeclaration resolveTypeDeclaration(IndexPoint typePoint) {
         CompilationUnit sourceCompilationUnit = typePoint != null ?
-            editor.getIndex().getCompilationUnit(typePoint) : null;
+            typePoint.resolveCompilationUnit() : null;
         if (sourceCompilationUnit == null) {
-            sourceCompilationUnit = typePoint != null ? editor.getIndex().getSourceCompilationUnit(typePoint) : null;
+            sourceCompilationUnit = typePoint != null ? typePoint.resolveCompilationUnit() : null;
+            ;
         }
         if (sourceCompilationUnit == null) {
             return null;
@@ -289,9 +290,9 @@ public class JavaTypeResolver {
         if (owner == null) {
             return null;
         }
-        CompilationUnit sourceCompilationUnit = editor.getIndex().getCompilationUnit(owner);
+        CompilationUnit sourceCompilationUnit = owner.resolveCompilationUnit();
         if (sourceCompilationUnit == null) {
-            sourceCompilationUnit = editor.getIndex().getSourceCompilationUnit(owner);
+            sourceCompilationUnit = owner.resolveCompilationUnit();
         }
         if (sourceCompilationUnit == null) {
             return null;

@@ -166,6 +166,15 @@ public class JavaFile extends FileEditor {
         return hoverService.computeHoverTip(position);
     }
 
+    @Override
+    public JumpTarget jump(int position) {
+        SourceLocation sourceLocation = resolveSourceLocation(position);
+        if (sourceLocation == null) {
+            return null;
+        }
+        return new JumpTarget(sourceLocation.getFile(), sourceLocation.getPosition());
+    }
+
     public SourceLocation resolveSourceLocation(int position) {
         return hoverService.resolveSourceLocation(position);
     }

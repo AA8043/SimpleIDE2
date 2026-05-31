@@ -29,10 +29,7 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
-import org.a8043.simpleIDE.fileEditor.CompleteItem;
-import org.a8043.simpleIDE.fileEditor.ControllableFile;
-import org.a8043.simpleIDE.fileEditor.DefaultFile;
-import org.a8043.simpleIDE.fileEditor.FileEditor;
+import org.a8043.simpleIDE.fileEditor.*;
 import org.a8043.simpleIDE.fileEditor.javaFile.JavaFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.index.IndexPoint;
@@ -97,6 +94,11 @@ public class FileTab {
     private final HBox toolBarContent = new HBox();
     private final HBox searchBox = new HBox();
     private final AtomicReference<Main.ModalController<CompleteBox>> nowCompleteBox = new AtomicReference<>();
+    /**
+     * 当前显示的错误提示Label<br>
+     * 用于在光标移出错误范围时关闭对应的提示
+     */
+    private Label currentErrorLabel;
 
     private FileTab(ProjectEditor editor, ControllableFile controllableFile, String fileType) {
         this.editor = editor;
@@ -121,21 +123,10 @@ public class FileTab {
 
     @SneakyThrows
     public static Tab createTab(ProjectEditor editor, ControllableFile file) {
-        ControllableFile controllableFile = file.getFile() != null ?
-            editor.openFile(file.getFile(), file.getContent(), file.isReadOnly()) : file;
         FXMLLoader fxmlLoader = new FXMLLoader(FXML_URL);
         fxmlLoader.setControllerFactory(param ->
-            new FileTab(editor, controllableFile, FileUtil.getSuffix(controllableFile.getName())));
-        return new FileTabTab(controllableFile, fxmlLoader.load(), fxmlLoader.getController());
-    }
-
-    @SneakyThrows
-    public static Tab createCachedSourceTab(ProjectEditor editor, IndexPoint point) {
-        ControllableFile controllableFile = editor.getIndex().openCachedSourceFile(point);
-        FXMLLoader fxmlLoader = new FXMLLoader(FXML_URL);
-        fxmlLoader.setControllerFactory(param ->
-            new FileTab(editor, controllableFile, FileUtil.getSuffix(controllableFile.getName())));
-        return new FileTabTab(point, controllableFile.getName(), fxmlLoader.load(), fxmlLoader.getController());
+            new FileTab(editor, file, FileUtil.getSuffix(file.getName())));
+        return new FileTabTab(file, fxmlLoader.load(), fxmlLoader.getController());
     }
 
     @FXML
@@ -248,18 +239,17 @@ public class FileTab {
         });
         codeArea.replaceText(fileEditor.getFile().read());
         codeArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
-            AtomicBoolean showed = new AtomicBoolean(false);
-            AtomicReference<Label> label = new AtomicReference<>();
-            fileEditor.getProblemList().forEach(error -> {
-                if (error.getStart() <= newPos && newPos <= error.getEnd()) {
-                    label.set(new Label(error.getMessage()));
-                    label.get().setWrapText(true);
-                    showTip(label.get());
-                    showed.set(true);
-                }
-            });
-            if (!showed.get() && !tipBox.getChildren().isEmpty() &&
-                tipBox.getChildren().getFirst().equals(label.get())) {
+            CodeError error = fileEditor.getProblemList().stream()
+                .filter(e -> e.getStart() <= newPos && newPos <= e.getEnd())
+                .findFirst().orElse(null);
+            if (error != null) {
+                Label label = new Label(error.getMessage());
+                label.setWrapText(true);
+                currentErrorLabel = label;
+                showTip(label);
+            } else if (currentErrorLabel != null && !tipBox.getChildren().isEmpty() &&
+                       tipBox.getChildren().getFirst().equals(currentErrorLabel)) {
+                currentErrorLabel = null;
                 closeTip();
             }
         });
@@ -269,16 +259,9 @@ public class FileTab {
                 return;
             }
             int position = codeArea.hit(event.getX(), event.getY()).getInsertionIndex();
-            if (fileEditor instanceof JavaFile javaFile) {
-                JavaFile.SourceLocation location = javaFile.resolveSourceLocation(position);
-                if (location != null && ProjectView.getCurrent() != null) {
-                    if (location.getPoint() != null && location.getFile() == null) {
-                        ProjectView.getCurrent().openCachedSourceFile(location.getPoint(), location.getPosition());
-                    } else {
-                        ProjectView.getCurrent().openFile(location.getFile(), location.getPosition());
-                    }
-                    event.consume();
-                }
+            FileEditor.JumpTarget jumpTarget = fileEditor.jump(position);
+            if (jumpTarget != null) {
+                ProjectView.get(editor).openFile(jumpTarget.getFile(), jumpTarget.getPosition());
             }
         });
 
@@ -551,15 +534,10 @@ public class FileTab {
         private final ControllableFile file;
         private final IndexPoint point;
         private final String name;
-        @Getter
         private final FileTab controller;
 
         public FileTabTab(ControllableFile file, Node node, FileTab tab) {
             this(file, null, file.getName(), node, tab);
-        }
-
-        public FileTabTab(IndexPoint point, String name, Node node, FileTab tab) {
-            this(null, point, name, node, tab);
         }
 
         private FileTabTab(ControllableFile file, IndexPoint point, String name, Node node, FileTab tab) {

@@ -15,7 +15,6 @@ import lombok.SneakyThrows;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
-import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.a8043.simpleIDE.project.ProjectModule;
 import org.a8043.simpleIDE.project.buildTool.Dependency;
@@ -56,11 +55,10 @@ public class Index extends JSONSupport implements Closeable {
     @Getter
     private final List<IndexPoint> indexList = new CopyOnWriteArrayList<>();
     private ZipFile standardLibraryZip;
+    @Getter
     private final Map<Dependency, ZipFile> dependencyZipMap = new HashMap<>();
     @Getter
     private final Map<String, IndexPoint> basicTypeMap;
-    private final Map<IndexPoint, String> sourceContentCacheMap = new IdentityHashMap<>();
-    private final Map<IndexPoint, String> sourceDisplayNameCacheMap = new IdentityHashMap<>();
     private final Map<String, IndexPoint> arrayTypeMap = new HashMap<>();
     private final Map<IndexPoint, IndexPoint> arrayComponentTypeMap = new IdentityHashMap<>();
 
@@ -90,24 +88,6 @@ public class Index extends JSONSupport implements Closeable {
     public Module getModuleByCacheName(String name) {
         return moduleList.stream().filter(m -> Objects.equals(m.getCacheName(), name))
             .findFirst().orElse(null);
-    }
-
-    public CompilationUnit getSourceCompilationUnit(IndexPoint point) {
-        if (point == null) {
-            return null;
-        }
-        String content = getCachedSourceContent(point);
-        if (content != null) {
-            ParseResult<CompilationUnit> result = editor.getJavaParser().parse(content);
-            return result.getResult().orElse(null);
-        }
-
-        File sourceFile = resolveProjectSourceFile(point);
-        if (sourceFile == null || !sourceFile.exists()) {
-            return null;
-        }
-        ParseResult<CompilationUnit> result = editor.getJavaParser().parse(FileUtil.readUtf8String(sourceFile));
-        return result.getResult().orElse(null);
     }
 
     public synchronized IndexPoint getOrCreateArrayType(IndexPoint componentType) {
@@ -165,47 +145,6 @@ public class Index extends JSONSupport implements Closeable {
             componentType = getOrCreateArrayType(componentType);
         }
         return componentType;
-    }
-
-    public CompilationUnit getCompilationUnit(IndexPoint point) {
-        if (point == null) {
-            return null;
-        }
-
-        ParseResult<CompilationUnit> result = editor.getJavaParser().parse(resolveSourceFile(point).getContent());
-        return result.getResult().orElse(null);
-    }
-
-    public ControllableFile resolveSourceFile(IndexPoint point) {
-        if (point == null || point.getPkg() == null || point.getPkg().getModule() == null) {
-            return null;
-        }
-
-        Module module = point.getPkg().getModule();
-        StringBuilder pathBuilder = new StringBuilder();
-        pathBuilder.append(module.getProjectModule().getName()).append("/");
-        for (String aPath : point.getPkg().getPath()) {
-            pathBuilder.append(aPath).append("/");
-        }
-        pathBuilder.append(point.getName()).append(".java");
-        String pathString = pathBuilder.toString();
-
-        ZipFile zipFile;
-        ZipEntry zipEntry;
-        if ((zipEntry = (zipFile = standardLibraryZip).getEntry(pathString)) == null) {
-            List<Dependency> equalsModuleDependencyList = new ArrayList<>();
-            dependencyZipMap.forEach((dependency, zip) -> {
-                if (dependency.getModuleName().equals(module.getProjectModule().getName())) {
-                    equalsModuleDependencyList.add(dependency);
-                }
-            });
-            if (equalsModuleDependencyList.isEmpty()) {
-                return null;
-            }
-            Dependency dependency = equalsModuleDependencyList.getFirst();
-            // TODO: 获取类
-        }
-        return new ControllableFile(pathBuilder.toString(), IoUtil.readUtf8(ZipUtil.getStream(zipFile, zipEntry)));
     }
 
     public IndexPoint index(Module module, String[] path, String content) {
@@ -395,8 +334,6 @@ public class Index extends JSONSupport implements Closeable {
         moduleList.addAll(List.of(new Module(this), new Module(this)));
         indexList.clear();
         dependencyZipMap.clear();
-        sourceContentCacheMap.clear();
-        sourceDisplayNameCacheMap.clear();
         arrayTypeMap.clear();
         arrayComponentTypeMap.clear();
         indexAll(afterStatistics, afterIndexOne, afterIndexAll, onException);
@@ -640,43 +577,8 @@ public class Index extends JSONSupport implements Closeable {
                StrUtil.join(".", (Object[]) componentType.getPath()) + "[]";
     }
 
-    public String getCachedSourceContent(IndexPoint point) {
-        return sourceContentCacheMap.get(point);
-    }
-
-    public String getCachedSourceDisplayName(IndexPoint point) {
-        return sourceDisplayNameCacheMap.get(point);
-    }
-
-    private void cacheSourceContent(IndexPoint point, String entryName, String content) {
-        sourceContentCacheMap.put(point, content);
-        sourceDisplayNameCacheMap.put(point, entryName.substring(entryName.lastIndexOf('/') + 1));
-    }
-
-    public ControllableFile openCachedSourceFile(IndexPoint point) {
-        String content = getCachedSourceContent(point);
-        String displayName = getCachedSourceDisplayName(point);
-        if (content == null || displayName == null) {
-            throw new IllegalArgumentException();
-        }
-        ControllableFile controllableFile = new ControllableFile(displayName, content);
-        editor.getOpenedFileList().add(controllableFile);
-        return controllableFile;
-    }
-
     private IndexPoint resolveJavaLangObjectType() {
         Module javaBase = getModule("java.base");
         return javaBase != null ? javaBase.getPoint(new String[]{"java", "lang", "Object"}) : null;
-    }
-
-    private ZipFile resolveDependencyZip(Module module) {
-        if (module == null || module.getProjectModule() == null) {
-            return null;
-        }
-        String moduleName = module.getProjectModule().getName();
-        return dependencyZipMap.entrySet().stream()
-            .filter(entry -> Objects.equals(entry.getKey().getModuleName(), moduleName))
-            .map(Map.Entry::getValue)
-            .findFirst().orElse(null);
     }
 }

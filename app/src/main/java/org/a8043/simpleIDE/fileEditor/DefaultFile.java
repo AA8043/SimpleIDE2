@@ -30,6 +30,11 @@ public class DefaultFile extends FileEditor {
     }
 
     @Override
+    public JumpTarget jump(int position) {
+        return null;
+    }
+
+    @Override
     public List<CodeError> getProblemList() {
         return List.of();
     }

@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.a8043.simpleIDE.Main;
 import org.a8043.simpleIDE.fileEditor.ControllableFile;
 import org.a8043.simpleIDE.project.ProjectEditor;
-import org.a8043.simpleIDE.project.index.IndexPoint;
 import org.a8043.simpleIDE.project.runnables.RunnableTask;
 import org.a8043.simpleIDE.project.runnables.Runner;
 import org.a8043.simpleIDE.resource.ResourceManager;
@@ -42,7 +41,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class ProjectView {
     public static final URL FXML_URL = ResourceUtil.getResource("ProjectView.fxml", ProjectView.class);
-    private static volatile ProjectView CURRENT;
+    private static final List<ProjectView> VIEW_LIST = new ArrayList<>();
     private static final List<FileMenuItemFactory> FILE_MENU_ITEM_LIST = new ArrayList<>();
 
     public interface FileMenuItemFactory {
@@ -87,15 +86,15 @@ public class ProjectView {
     @FXML
     private Button runnableRunButton;
     @FXML
-    public ComboBox<String> gitBranchBox;
+    private ComboBox<String> gitBranchBox;
 
     public ProjectView(ProjectEditor editor) {
         this.editor = editor;
-        CURRENT = this;
+        VIEW_LIST.add(this);
     }
 
-    public static ProjectView getCurrent() {
-        return CURRENT;
+    public static ProjectView get(ProjectEditor editor) {
+        return VIEW_LIST.stream().filter(view -> view.editor == editor).findFirst().orElse(null);
     }
 
     @FXML
@@ -270,13 +269,13 @@ public class ProjectView {
         fileTreeView.setRoot(root);
     }
 
-    public void openFile(ControllableFile file, int caretPosition) {
+    public FileTab.FileTabTab openFile(ControllableFile file, int caretPosition) {
         if (file == null) {
-            return;
+            return null;
         }
         Tab tab = editorTabPane.getTabs().stream()
             .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab &&
-                                   Objects.equals(file.getFile(), fileTab.getFile().getFile()))
+                                   isSameFile(file, fileTab.getFile()))
             .findFirst().orElseGet(() -> {
                 Tab newTab = FileTab.createTab(editor, file);
                 editorTabPane.getTabs().add(newTab);
@@ -286,23 +285,18 @@ public class ProjectView {
         if (tab instanceof FileTab.FileTabTab fileTab && fileTab.getController() != null) {
             fileTab.getController().navigateTo(caretPosition);
         }
+        if (tab instanceof FileTab.FileTabTab fileTabTab) {
+            return fileTabTab;
+        } else {
+            throw new RuntimeException();
+        }
     }
 
-    public void openCachedSourceFile(IndexPoint point, int caretPosition) {
-        if (point == null) {
-            return;
+    private static boolean isSameFile(ControllableFile left, ControllableFile right) {
+        if (left.getFile() == null || right.getFile() == null) {
+            return left == right;
         }
-        Tab tab = editorTabPane.getTabs().stream()
-            .filter(existingTab -> existingTab instanceof FileTab.FileTabTab fileTab && point.equals(fileTab.getPoint()))
-            .findFirst().orElseGet(() -> {
-                Tab newTab = FileTab.createCachedSourceTab(editor, point);
-                editorTabPane.getTabs().add(newTab);
-                return newTab;
-            });
-        editorTabPane.getSelectionModel().select(tab);
-        if (tab instanceof FileTab.FileTabTab fileTab && fileTab.getController() != null) {
-            fileTab.getController().navigateTo(caretPosition);
-        }
+        return Objects.equals(left.getFile(), right.getFile());
     }
 
     private static void addFileToTreeItem(File lastFile, TreeItem<File> treeItem) {
@@ -354,7 +348,7 @@ public class ProjectView {
             if (selectedItem != null) {
                 File file = selectedItem.getValue();
                 if (file.isFile()) {
-                    openFile(editor.openFile(file, null, false), 0);
+                    openFile(editor.openFile(file), 0);
                 }
             }
         }

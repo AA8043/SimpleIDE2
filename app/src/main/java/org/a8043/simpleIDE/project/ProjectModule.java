@@ -15,6 +15,10 @@ public class ProjectModule {
     private String name;
     private ProjectModule.Location location;
     private List<ProjectModule> childList;
+    /**
+     * 源代码目录列表<br>
+     * 例如: project/src/main/java
+     */
     private List<File> srcDir;
     private List<File> resourcesDir;
     private List<File> testSrcDir;

@@ -1,6 +1,7 @@
 package org.a8043.simpleIDE.fileEditor;
 
 import lombok.Getter;
+import lombok.Value;
 import org.a8043.simpleIDE.project.ProjectEditor;
 import org.fxmisc.richtext.model.StyleSpan;
 import org.fxmisc.richtext.model.StyleSpans;
@@ -62,5 +63,13 @@ public abstract class FileEditor {
 
     public abstract String computeHoverTip(int position);
 
+    public abstract JumpTarget jump(int position);
+
     public abstract List<CodeError> getProblemList();
+
+    @Value
+    public static class JumpTarget {
+        ControllableFile file;
+        int position;
+    }
 }

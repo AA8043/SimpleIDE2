@@ -113,9 +113,9 @@ public class JavaHoverService {
                     return;
                 }
                 IndexPoint ownerType = resolveMethodCallOwnerType(compilationUnit, n);
-                CompilationUnit sourceUnit = ownerType != null ? editor.getIndex().getCompilationUnit(ownerType) : null;
+                CompilationUnit sourceUnit = ownerType != null ? ownerType.resolveCompilationUnit() : null;
                 if (sourceUnit == null && ownerType != null) {
-                    sourceUnit = editor.getIndex().getSourceCompilationUnit(ownerType);
+                    sourceUnit = ownerType.resolveCompilationUnit();
                 }
                 MethodDeclaration declaration = sourceUnit != null ?
                     typeResolver.resolveMethodDeclaration(sourceUnit, n, compilationUnit) : null;
@@ -259,9 +259,9 @@ public class JavaHoverService {
 
                 IndexPoint in = resolvedPointList.get(resolvedPointList.size() - 2);
                 source.set(in);
-                CompilationUnit unit = in != null ? editor.getIndex().getCompilationUnit(in) : null;
+                CompilationUnit unit = in != null ? in.resolveCompilationUnit() : null;
                 if (unit == null && in != null) {
-                    unit = editor.getIndex().getSourceCompilationUnit(in);
+                    unit = in.resolveCompilationUnit();
                 }
                 if (unit != null) {
                     methodDeclaration.set(typeResolver.resolveMethodDeclaration(unit, n, compilationUnit));
@@ -284,9 +284,9 @@ public class JavaHoverService {
             return "";
         }
         IndexPoint in = lastPointList.get(lastPointList.size() - 2);
-        CompilationUnit unit = in != null ? editor.getIndex().getCompilationUnit(in) : null;
+        CompilationUnit unit = in != null ? in.resolveCompilationUnit() : null;
         if (unit == null && in != null) {
-            unit = editor.getIndex().getSourceCompilationUnit(in);
+            unit = in.resolveCompilationUnit();
         }
         if (unit != null) {
             methodDeclaration.set(typeResolver.resolveMethodDeclaration(unit, n, compilationUnit));
@@ -674,12 +674,11 @@ public class JavaHoverService {
     }
 
     private ControllableFile resolveSourceFile(IndexPoint typePoint) {
-        ControllableFile file = editor.getIndex().resolveSourceFile(typePoint);
-        ;
+        ControllableFile file = typePoint.resolveSourceFile();
         if (file != null) {
             return file;
         }
-        return editor.getIndex().getCachedSourceContent(typePoint) != null ? null : getCurrentFile();
+        return typePoint.resolveSourceFile() != null ? null : getCurrentFile();
     }
 
     private JavaFile.SourceLocation createLocation(ControllableFile file, IndexPoint point, Node node, String content) {
