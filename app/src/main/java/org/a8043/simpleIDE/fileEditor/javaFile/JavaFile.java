@@ -34,7 +34,7 @@ public class JavaFile extends FileEditor {
         super(file, editor);
         state = new JavaFileState(resolveIndexPoint(file, editor));
         JavaTypeResolver typeResolver = new JavaTypeResolver(editor, state, this::getContent);
-        diagnosticService = new JavaDiagnosticService(editor, state);
+        diagnosticService = new JavaDiagnosticService(editor, state, typeResolver, this::getContent);
         highlightService = new JavaHighlightService(state);
         completionService = new JavaCompletionService(editor, state, this::getContent, typeResolver);
         hoverService = new JavaHoverService(editor, state, this::getContent, this::getFile, typeResolver);

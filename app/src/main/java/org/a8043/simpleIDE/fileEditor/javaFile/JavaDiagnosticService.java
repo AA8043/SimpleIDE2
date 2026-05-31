@@ -17,14 +17,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class JavaDiagnosticService {
     private final ProjectEditor editor;
     private final JavaFileState state;
+    private final JavaSymbolChecker symbolChecker;
 
-    public JavaDiagnosticService(ProjectEditor editor, JavaFileState state) {
+    public JavaDiagnosticService(ProjectEditor editor, JavaFileState state, JavaTypeResolver typeResolver,
+                                 Supplier<String> contentSupplier) {
         this.editor = editor;
         this.state = state;
+        this.symbolChecker = new JavaSymbolChecker(editor, state, typeResolver, contentSupplier);
     }
 
     public boolean analyze(String content) {
@@ -85,6 +89,11 @@ public class JavaDiagnosticService {
             addEmptyBodyWarning(whileStmt.getBody(), "while", content));
         unit.findAll(DoStmt.class).forEach(doStmt ->
             addEmptyBodyWarning(doStmt.getBody(), "do-while", content));
+
+        // 语义检查: 仅在解析完全成功时进行, 避免基于残缺语法树误报
+        if (parseResult.isSuccessful()) {
+            symbolChecker.check(unit, content);
+        }
 
         return true;
     }

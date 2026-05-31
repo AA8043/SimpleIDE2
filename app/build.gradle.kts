@@ -186,3 +186,7 @@ tasks.jar {
         into("META-INF/dependency-license")
     }
 }
+
+tasks.test {
+    workingDir = File(rootDir, "test")
+}
