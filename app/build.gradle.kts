@@ -59,7 +59,6 @@ configurations.all {
     }
 }
 
-val javafxVersion = javafx.version
 val osName = System.getProperty("os.name").lowercase()
 val javafxPlatform = when {
     osName.contains("win") -> "win"
@@ -82,11 +81,11 @@ dependencies {
     implementation("org.gradle:gradle-tooling-api:9.0.0")
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.6.0.202603022253-r")
 
-    implementation("org.openjfx:javafx-controls:$javafxVersion:$javafxPlatform")
-    implementation("org.openjfx:javafx-base:$javafxVersion:$javafxPlatform")
-    implementation("org.openjfx:javafx-fxml:$javafxVersion:$javafxPlatform")
-    implementation("org.openjfx:javafx-swing:$javafxVersion:$javafxPlatform")
-    implementation("org.openjfx:javafx-web:$javafxVersion:$javafxPlatform")
+    implementation("org.openjfx:javafx-controls:${javafx.version}:$javafxPlatform")
+    implementation("org.openjfx:javafx-base:${javafx.version}:$javafxPlatform")
+    implementation("org.openjfx:javafx-fxml:${javafx.version}:$javafxPlatform")
+    implementation("org.openjfx:javafx-swing:${javafx.version}:$javafxPlatform")
+    implementation("org.openjfx:javafx-web:${javafx.version}:$javafxPlatform")
     implementation("org.fxmisc.richtext:richtextfx:0.11.7")
     implementation("io.github.typhon0:AnimateFX:1.3.0")
 
@@ -95,13 +94,10 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-slf4j-impl:2.20.0")
 
     implementation("cn.hutool:hutool-all:5.8.38")
-    implementation("com.pivovarit:parallel-collectors:4.0.0")
     implementation("org.commonjava.googlecode.markdown4j:markdown4j:2.2-cj-1.1")
 
     compileOnly("org.projectlombok:lombok:1.18.30")
     annotationProcessor("org.projectlombok:lombok:1.18.30")
-    testCompileOnly("org.projectlombok:lombok:1.18.30")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.30")
     testImplementation("junit:junit:4.13.1")
 }
 
@@ -167,7 +163,7 @@ tasks.register("generateFiles") {
     }
 
     doLast {
-        val versionJson = JSONObject().set("ide", version).set("javafx", javafxVersion)
+        val versionJson = JSONObject().set("ide", version).set("javafx", javafx.version)
         versionFile.writeText(versionJson.toString())
 
         val imagesJson = JSONArray()
