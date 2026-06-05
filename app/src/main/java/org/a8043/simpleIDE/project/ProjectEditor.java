@@ -137,7 +137,9 @@ public class ProjectEditor implements Closeable {
 
         jdk = Jdk.getJdk(config.getJdkPath());
         javaParserThreadLocal = ThreadLocal.withInitial(() -> new JavaParser(new ParserConfiguration()
-            .setLanguageLevel(jdk.getLanguageLevel()).setCharacterEncoding(StandardCharsets.UTF_8)));
+            .setLanguageLevel(jdk.getLanguageLevel())
+            .setCharacterEncoding(StandardCharsets.UTF_8)
+            .setDoNotAssignCommentsPrecedingEmptyLines(false)));
 
         indexCacheFile = new File(configDir, "indexCache.json");
         index = new Index(this);
