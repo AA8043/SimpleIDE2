@@ -408,7 +408,7 @@ public class JavaSymbolChecker {
     private ClassOrInterfaceDeclaration resolveDeclaration(IndexPoint type) {
         if (isCurrentType(type) && currentUnit != null) {
             return currentUnit.findAll(ClassOrInterfaceDeclaration.class).stream()
-                .filter(declaration -> declaration.getNameAsString().equals(type.getName()))
+                .filter(declaration -> Arrays.equals(JavaUtil.buildTypePath(currentUnit, declaration), type.getPath()))
                 .findFirst().orElse(null);
         }
         return typeResolver.resolveTypeDeclaration(type);

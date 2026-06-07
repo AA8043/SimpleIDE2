@@ -35,6 +35,11 @@ public class DefaultFile extends FileEditor {
     }
 
     @Override
+    public List<Usage> findUsages(int position) {
+        return null;
+    }
+
+    @Override
     public List<CodeError> getProblemList() {
         return List.of();
     }

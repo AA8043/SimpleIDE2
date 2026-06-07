@@ -78,9 +78,8 @@ public class Module extends JSONSupport {
         if (path == null || path.length == 0) {
             return false;
         }
-        Package pkg = getPackage(ArrayUtil.sub(path, 0, path.length - 1));
         return index.getIndexList().stream().anyMatch(point ->
-            point.getPkg() == pkg && ArrayUtil.equals(point.getPath(), path));
+            point.getPkg().getModule() == this && ArrayUtil.equals(point.getPath(), path));
     }
 
     public List<IndexPoint> getPoints() {

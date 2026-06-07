@@ -109,8 +109,8 @@ public class JavaUtil {
         }
 
         if (index != null && unit != null && source != null) {
-            TypeDeclaration<?> declaration = unit.getTypes().stream().filter(type -> type.getNameAsString().equals(name))
-                .findFirst().orElse(null);
+            TypeDeclaration<?> declaration = unit.findAll(TypeDeclaration.class).stream()
+                .filter(type -> type.getNameAsString().equals(name)).findFirst().orElse(null);
             if (declaration != null) {
                 Module module = source.getPkg() != null ? source.getPkg().getModule() : null;
                 if (module != null) {
@@ -121,6 +121,15 @@ public class JavaUtil {
                 }
                 if (Objects.equals(source.getName(), declaration.getNameAsString())) {
                     return source;
+                }
+            }
+        }
+
+        if (index != null && source != null) {
+            for (IndexPoint owner = source; owner != null; owner = owner.getEnclosingType()) {
+                IndexPoint nestedPoint = resolveNestedPoint(owner, name);
+                if (nestedPoint != null) {
+                    return nestedPoint;
                 }
             }
         }
@@ -410,10 +419,38 @@ public class JavaUtil {
         return builder.toString();
     }
 
-    private static String[] buildTypePath(CompilationUnit unit, TypeDeclaration<?> declaration) {
+    public static String[] buildTypePath(CompilationUnit unit, TypeDeclaration<?> declaration) {
         String[] packagePath = unit.getPackageDeclaration().map(pkg -> pkg.getNameAsString().split("\\."))
             .orElse(new String[0]);
-        return ArrayUtil.addAll(packagePath, new String[]{declaration.getNameAsString()});
+        List<String> typeNameList = new ArrayList<>();
+        Optional<TypeDeclaration> current = Optional.of(declaration);
+        while (current.isPresent()) {
+            typeNameList.add(current.get().getNameAsString());
+            current = current.get().findAncestor(TypeDeclaration.class);
+        }
+        Collections.reverse(typeNameList);
+        return ArrayUtil.addAll(packagePath, typeNameList.toArray(new String[0]));
+    }
+
+    public static IndexPoint resolveNestedPoint(IndexPoint owner, String name) {
+        if (owner == null || name == null || owner.getIndex() == null) {
+            return null;
+        }
+        return owner.getIndex().getIndexList().stream()
+            .filter(point -> Objects.equals(point.getName(), name))
+            .filter(point -> isSameType(point.getEnclosingType(), owner))
+            .findFirst().orElse(null);
+    }
+
+    private static IndexPoint resolveNestedPath(IndexPoint owner, String[] nestedPath, int offset) {
+        IndexPoint current = owner;
+        for (int i = offset; i < nestedPath.length; i++) {
+            current = resolveNestedPoint(current, nestedPath[i]);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
     }
 
     private static IndexPoint resolveDeclaredType(Index index, IndexPoint source, String typeName, CompilationUnit unit) {
@@ -430,6 +467,23 @@ public class JavaUtil {
                 IndexPoint point = module.getPoint(path);
                 if (point != null) {
                     return point;
+                }
+            }
+            if (source != null) {
+                IndexPoint owner = resolvePointByName(index, source, path[0], unit);
+                IndexPoint nestedPoint = resolveNestedPath(owner, path, 1);
+                if (nestedPoint != null) {
+                    return nestedPoint;
+                }
+                if (source.getPkg() != null) {
+                    String[] pkgPath = source.getPkg().getPath();
+                    String[] samePackagePath = ArrayUtil.addAll(pkgPath != null ? pkgPath : new String[0], path);
+                    if (source.getPkg().getModule() != null) {
+                        IndexPoint samePackagePoint = resolvePointByPath(index, source.getPkg().getModule(), samePackagePath);
+                        if (samePackagePoint != null) {
+                            return samePackagePoint;
+                        }
+                    }
                 }
             }
         }

@@ -44,7 +44,8 @@ public class Package extends JSONSupport {
     }
 
     public IndexPoint getPoint(String name) {
-        return getPoints().stream().filter(point -> point.getName().equals(name)).findFirst().orElse(null);
+        return getPoints().stream().filter(point -> point.getEnclosingType() == null)
+            .filter(point -> point.getName().equals(name)).findFirst().orElse(null);
     }
 
     @Override

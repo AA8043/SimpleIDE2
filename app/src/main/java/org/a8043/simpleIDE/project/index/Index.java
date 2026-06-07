@@ -9,6 +9,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONSupport;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.modules.ModuleRequiresDirective;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -37,6 +38,8 @@ import java.util.zip.ZipFile;
  */
 @Slf4j
 public class Index extends JSONSupport implements Closeable {
+    private static final int INDEX_CACHE_VERSION = 2;
+
     @Getter
     private final ProjectEditor editor;
     @Getter
@@ -148,7 +151,7 @@ public class Index extends JSONSupport implements Closeable {
     }
 
     public IndexPoint index(Module module, String[] path, String content) {
-        indexList.removeIf(point -> point.getPkg().getModule() == module && ArrayUtil.equals(point.getPath(), path));
+        indexList.removeIf(point -> isPointFromSourcePath(point, module, path));
         List<MethodIndexTemp> methodTempList = new ArrayList<>();
         List<FieldIndexTemp> fieldTempList = new ArrayList<>();
         indexOne(module, path, content, methodTempList, fieldTempList);
@@ -162,30 +165,44 @@ public class Index extends JSONSupport implements Closeable {
 
     private void indexOne(Module module, String[] path, String content,
                           List<MethodIndexTemp> methodTempList, List<FieldIndexTemp> fieldTempList) {
-        IndexPoint old = module.getPoint(path);
-        if (old != null) {
-            indexList.remove(old);
-        }
+        List<IndexPoint> oldPointList = indexList.stream()
+            .filter(point -> isPointFromSourcePath(point, module, path)).toList();
+        indexList.removeAll(oldPointList);
 
+        Package pkg = module.getOrCreatePackage(ArrayUtil.sub(path, 0, path.length - 1));
         ParseResult<CompilationUnit> result = editor.getJavaParser().parse(content);
-        result.getResult().ifPresentOrElse(unit -> unit.getTypes().forEach(type -> {
-            // TODO: 内部类
-            IndexPoint point = new IndexPoint(type.getNameAsString(),
-                module.getOrCreatePackage(ArrayUtil.sub(path, 0, path.length - 1)), null, this);
-            indexList.add(point);
-            type.getMethods().forEach(method -> {
-                Map<String, IncompleteType> parameterMap = new LinkedHashMap<>();
-                method.getParameters().forEach(parameter -> parameterMap.put(parameter.getNameAsString(),
-                    createIncompleteType(point, unit, parameter.getType().asString())));
-                methodTempList.add(new MethodIndexTemp(point, method.getNameAsString(),
-                    Access.fromJavaParser(method.getAccessSpecifier()), method.isStatic(),
-                    createIncompleteType(point, unit, method.getType().asString()), parameterMap));
-            });
-            type.getFields().forEach(field -> field.getVariables().forEach(variable ->
-                fieldTempList.add(new FieldIndexTemp(point, variable.getNameAsString(),
-                    Access.fromJavaParser(field.getAccessSpecifier()), field.isStatic(),
-                    createIncompleteType(point, unit, variable.getType().asString())))));
-        }), () -> indexList.add(old));
+        result.getResult().ifPresentOrElse(unit -> unit.getTypes().forEach(type ->
+                indexTypeDeclaration(pkg, unit, type, null, methodTempList, fieldTempList)),
+            () -> indexList.addAll(oldPointList));
+    }
+
+    private void indexTypeDeclaration(Package pkg, CompilationUnit unit, TypeDeclaration<?> type,
+                                      IndexPoint enclosingType, List<MethodIndexTemp> methodTempList,
+                                      List<FieldIndexTemp> fieldTempList) {
+        IndexPoint point = new IndexPoint(type.getNameAsString(), pkg, null, this);
+        point.setEnclosingType(enclosingType);
+        indexList.add(point);
+        type.getMethods().forEach(method -> {
+            Map<String, IncompleteType> parameterMap = new LinkedHashMap<>();
+            method.getParameters().forEach(parameter -> parameterMap.put(parameter.getNameAsString(),
+                createIncompleteType(point, unit, parameter.getType().asString())));
+            methodTempList.add(new MethodIndexTemp(point, method.getNameAsString(),
+                Access.fromJavaParser(method.getAccessSpecifier()), method.isStatic(),
+                createIncompleteType(point, unit, method.getType().asString()), parameterMap));
+        });
+        type.getFields().forEach(field -> field.getVariables().forEach(variable ->
+            fieldTempList.add(new FieldIndexTemp(point, variable.getNameAsString(),
+                Access.fromJavaParser(field.getAccessSpecifier()), field.isStatic(),
+                createIncompleteType(point, unit, variable.getType().asString())))));
+        type.getMembers().forEach(member -> {
+            if (member instanceof TypeDeclaration<?> memberType) {
+                indexTypeDeclaration(pkg, unit, memberType, point, methodTempList, fieldTempList);
+            }
+        });
+    }
+
+    private boolean isPointFromSourcePath(IndexPoint point, Module module, String[] sourcePath) {
+        return point.getPkg().getModule() == module && ArrayUtil.equals(point.getSourcePath(), sourcePath);
     }
 
     private void indexMethodAndField(List<MethodIndexTemp> methodTempList, List<FieldIndexTemp> fieldTempList) {
@@ -224,9 +241,12 @@ public class Index extends JSONSupport implements Closeable {
     public void indexAll(Consumer<Integer> afterStatistics, Runnable afterIndexOne,
                          Runnable afterIndexAll, Consumer<Exception> onException) {
         if (editor.getIndexCacheFile().exists()) {
-            fromJson(new JSONObject(FileUtil.readUtf8String(editor.getIndexCacheFile())));
-            isIndexed = true;
-            return;
+            JSONObject cacheJson = new JSONObject(FileUtil.readUtf8String(editor.getIndexCacheFile()));
+            if (Objects.equals(cacheJson.getInt("indexVersion"), INDEX_CACHE_VERSION)) {
+                fromJson(cacheJson);
+                isIndexed = true;
+                return;
+            }
         }
 
         try {
@@ -414,7 +434,7 @@ public class Index extends JSONSupport implements Closeable {
         if (projectModule == null) {
             return null;
         }
-        String relativePath = StrUtil.join("/", (Object[]) point.getPath()) + ".java";
+        String relativePath = StrUtil.join("/", (Object[]) point.getSourcePath()) + ".java";
         for (File srcDir : projectModule.getSrcDirList()) {
             File candidate = new File(srcDir, relativePath);
             if (candidate.exists()) {
@@ -454,8 +474,9 @@ public class Index extends JSONSupport implements Closeable {
 
     @Override
     public JSONObject toJSON() {
-        return new JSONObject().set("moduleList", moduleList).set("indexList", indexList.stream()
-            .filter(point -> !basicTypeMap.containsValue(point)).toList());
+        return new JSONObject().set("indexVersion", INDEX_CACHE_VERSION)
+            .set("moduleList", moduleList).set("indexList", indexList.stream()
+                .filter(point -> !basicTypeMap.containsValue(point)).toList());
     }
 
     public void fromJson(JSONObject json) {
@@ -488,6 +509,8 @@ public class Index extends JSONSupport implements Closeable {
         }));
 
         Map<IndexPoint, JSONObject> pointParentJsonMap = new HashMap<>();
+        Map<IndexPoint, JSONObject> pointEnclosingJsonMap = new HashMap<>();
+        Map<String, IndexPoint> serializedPointMap = new HashMap<>();
         json.getJSONArray("indexList").forEach(indexJsonObject -> {
             JSONObject indexJson = (JSONObject) indexJsonObject;
             String[] path = indexJson.getStr("path").split("\\.");
@@ -500,24 +523,31 @@ public class Index extends JSONSupport implements Closeable {
             } else {
                 module = getModule(moduleName);
             }
-            Package pkg;
-            String[] pkgPath = ArrayUtil.sub(path, 0, path.length - 1);
-            if (pkgPath.length == 0) {
-                pkg = module.getPackageList().getFirst();
-            } else {
-                pkg = module.getPackage(pkgPath);
-            }
+            Package pkg = resolveSerializedPointPackage(module, path);
             IndexPoint point = new IndexPoint(path[path.length - 1], pkg, null, this);
+            JSONObject enclosingTypeJson = indexJson.getJSONObject("enclosingType");
+            if (enclosingTypeJson == null && getPackagePathLength(pkg) < path.length - 1) {
+                enclosingTypeJson = new JSONObject()
+                    .set("moduleName", module.getCacheName())
+                    .set("path", ArrayUtil.join(ArrayUtil.sub(path, 0, path.length - 1), "."));
+            }
             indexList.add(point);
+            serializedPointMap.put(serializedPointKey(module.getCacheName(), indexJson.getStr("path")), point);
             JSONObject parent = indexJson.getJSONObject("parent");
             if (parent != null) {
                 pointParentJsonMap.put(point, parent);
             }
+            if (enclosingTypeJson != null) {
+                pointEnclosingJsonMap.put(point, enclosingTypeJson);
+            }
         });
+        pointEnclosingJsonMap.forEach((point, enclosingTypeJson) ->
+            point.setEnclosingType(serializedPointMap.get(serializedPointKey(enclosingTypeJson.getStr("moduleName"),
+                enclosingTypeJson.getStr("path")))));
         json.getJSONArray("indexList").forEach(indexJsonObject -> {
             JSONObject indexJson = (JSONObject) indexJsonObject;
-            IndexPoint point = getModuleByCacheName(indexJson.getStr("moduleName"))
-                .getPoint(indexJson.getStr("path").split("\\."));
+            IndexPoint point = serializedPointMap.get(serializedPointKey(indexJson.getStr("moduleName"),
+                indexJson.getStr("path")));
             indexJson.getJSONArray("methodList").forEach(methodJsonObject -> {
                 JSONObject methodJson = (JSONObject) methodJsonObject;
                 Map<String, IndexPoint> parameterMap = new LinkedHashMap<>();
@@ -585,5 +615,25 @@ public class Index extends JSONSupport implements Closeable {
     private IndexPoint resolveJavaLangObjectType() {
         Module javaBase = getModule("java.base");
         return javaBase != null ? javaBase.getPoint(new String[]{"java", "lang", "Object"}) : null;
+    }
+
+    private Package resolveSerializedPointPackage(Module module, String[] path) {
+        for (int end = path.length - 1; end >= 0; end--) {
+            String[] pkgPath = ArrayUtil.sub(path, 0, end);
+            Package pkg = pkgPath.length == 0 ? module.getPackageList().getFirst() : module.getPackage(pkgPath);
+            if (pkg != null) {
+                return pkg;
+            }
+        }
+        return module.getPackageList().getFirst();
+    }
+
+    private int getPackagePathLength(Package pkg) {
+        String[] path = pkg != null ? pkg.getPath() : null;
+        return path != null ? path.length : 0;
+    }
+
+    private String serializedPointKey(String moduleName, String path) {
+        return moduleName + ":" + path;
     }
 }

@@ -213,8 +213,10 @@ public class JavaTypeResolver {
         if (sourceCompilationUnit == null) {
             return null;
         }
-        return sourceCompilationUnit.findAll(ClassOrInterfaceDeclaration.class).stream()
-            .filter(declaration -> declaration.getNameAsString().equals(typePoint.getName()))
+        CompilationUnit finalSourceCompilationUnit = sourceCompilationUnit;
+        return finalSourceCompilationUnit.findAll(ClassOrInterfaceDeclaration.class).stream()
+            .filter(declaration -> Arrays.equals(JavaUtil.buildTypePath(finalSourceCompilationUnit, declaration),
+                typePoint.getPath()))
             .findFirst().orElse(null);
     }
 

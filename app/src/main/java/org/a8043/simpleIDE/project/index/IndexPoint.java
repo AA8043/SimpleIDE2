@@ -26,6 +26,8 @@ public class IndexPoint extends JSONSupport {
     private final Package pkg;
     @Setter(AccessLevel.PACKAGE)
     private IndexPoint parent;
+    @Setter(AccessLevel.PACKAGE)
+    private IndexPoint enclosingType;
     private final Index index;
     private final List<MethodSignature> methodList = new ArrayList<>();
     private final List<FieldSignature> fieldList = new ArrayList<>();
@@ -39,8 +41,11 @@ public class IndexPoint extends JSONSupport {
 
     public String[] getPath() {
         String[] nameArray = {name};
-        if (isBasicType()) {
+        if (isBasicType() || pkg == null) {
             return nameArray;
+        }
+        if (enclosingType != null) {
+            return ArrayUtil.addAll(enclosingType.getPath(), nameArray);
         }
         String[] pkgPath = pkg.getPath();
         if (pkgPath == null || ArrayUtil.equals(pkgPath, new Object[]{null})) {
@@ -48,6 +53,25 @@ public class IndexPoint extends JSONSupport {
         } else {
             return ArrayUtil.addAll(pkgPath, nameArray);
         }
+    }
+
+    public String[] getSourcePath() {
+        if (enclosingType != null) {
+            return enclosingType.getSourcePath();
+        }
+        return getPath();
+    }
+
+    public boolean isNestedType() {
+        return enclosingType != null;
+    }
+
+    public String getQualifiedName() {
+        return ArrayUtil.join(getPath(), ".");
+    }
+
+    public String getImportQualifiedName() {
+        return getQualifiedName();
     }
 
     public List<MethodSignature> getMethodList(String name) {
@@ -84,7 +108,7 @@ public class IndexPoint extends JSONSupport {
             return sourceFileCache;
         }
 
-        String[] pathArray = getPath();
+        String[] pathArray = getSourcePath();
         StringBuilder pathBuilder = new StringBuilder();
         for (String aPath : pathArray) {
             pathBuilder.append(aPath).append("/");
@@ -114,8 +138,14 @@ public class IndexPoint extends JSONSupport {
 
     @Override
     public JSONObject toJSON() {
-        return new JSONObject().set("path", ArrayUtil.join(getPath(), "."))
+        JSONObject json = new JSONObject().set("path", ArrayUtil.join(getPath(), "."))
             .set("moduleName", pkg.getModule().getCacheName())
             .set("methodList", methodList).set("fieldList", fieldList);
+        if (enclosingType != null) {
+            json.set("enclosingType", new JSONObject()
+                .set("moduleName", enclosingType.getPkg().getModule().getCacheName())
+                .set("path", enclosingType.getQualifiedName()));
+        }
+        return json;
     }
 }
