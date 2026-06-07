@@ -44,21 +44,36 @@ public class JavaTypeResolver {
             case NameExpr nameExpr -> resolveNameExprType(nameExpr, compilationUnit);
             case MethodCallExpr methodCallExpr -> {
                 IndexPoint scopeType = methodCallExpr.getScope()
-                    .map(scope -> resolveExpressionType(scope, compilationUnit)).orElse(state.getIndexPoint());
+                    .map(scope -> resolveExpressionType(scope, compilationUnit)).orElse(currentTypeFor(methodCallExpr, compilationUnit));
                 MethodSignature methodSignature = resolveMethodSignature(scopeType, methodCallExpr, compilationUnit);
                 yield methodSignature != null ? methodSignature.getReturnType() : null;
             }
             case FieldAccessExpr fieldAccessExpr -> {
+                String qualifiedName = JavaUtil.resolveQualifiedName(fieldAccessExpr);
+                if (qualifiedName != null) {
+                    IndexPoint qualifiedType = JavaUtil.resolveType(editor.getIndex(), currentTypeFor(fieldAccessExpr, compilationUnit),
+                        qualifiedName, compilationUnit);
+                    if (qualifiedType != null) {
+                        yield qualifiedType;
+                    }
+                }
                 IndexPoint scopeType = resolveExpressionType(fieldAccessExpr.getScope(), compilationUnit);
                 if (scopeType == null) {
                     yield null;
+                }
+                IndexPoint nestedType = JavaUtil.resolveNestedPoint(scopeType, fieldAccessExpr.getNameAsString());
+                if (nestedType != null) {
+                    yield nestedType;
                 }
                 JavaFieldLookup fieldLookup = resolveFieldLookup(scopeType, fieldAccessExpr.getNameAsString());
                 FieldSignature field = fieldLookup != null ? fieldLookup.signature() : null;
                 yield field != null ? field.getType() : null;
             }
-            case ThisExpr ignored -> state.getIndexPoint();
-            case SuperExpr ignored -> state.getIndexPoint() != null ? state.getIndexPoint().getParent() : null;
+            case ThisExpr thisExpr -> currentTypeFor(thisExpr, compilationUnit);
+            case SuperExpr superExpr -> {
+                IndexPoint currentType = currentTypeFor(superExpr, compilationUnit);
+                yield currentType != null ? currentType.getParent() : null;
+            }
             case EnclosedExpr enclosedExpr -> resolveExpressionType(enclosedExpr.getInner(), compilationUnit);
             case CastExpr castExpr -> resolveType(castExpr.getType().asString(), compilationUnit);
             case ObjectCreationExpr objectCreationExpr ->
@@ -99,8 +114,9 @@ public class JavaTypeResolver {
         }
 
         if (state.getIndexPoint() != null) {
-            IndexPoint currentFileFieldType = state.getIndexPoint().getField(name) != null ?
-                state.getIndexPoint().getField(name).getType() : null;
+            IndexPoint currentType = currentTypeFor(nameExpr, compilationUnit);
+            FieldSignature currentFileField = currentType != null ? currentType.getField(name) : null;
+            IndexPoint currentFileFieldType = currentFileField != null ? currentFileField.getType() : null;
             if (currentFileFieldType != null) {
                 return currentFileFieldType;
             }
@@ -286,6 +302,27 @@ public class JavaTypeResolver {
 
     public String formatIndexPointPath(IndexPoint point) {
         return point != null ? StrUtil.join(".", (Object[]) point.getPath()) : "unknown";
+    }
+
+    public IndexPoint resolveCurrentType(Node node, CompilationUnit compilationUnit) {
+        return currentTypeFor(node, compilationUnit);
+    }
+
+    private IndexPoint currentTypeFor(Node node, CompilationUnit compilationUnit) {
+        IndexPoint fallback = state.getIndexPoint();
+        if (fallback == null || compilationUnit == null) {
+            return fallback;
+        }
+        TypeDeclaration<?> declaration = node.findAncestor(TypeDeclaration.class).orElse(null);
+        if (declaration == null && node instanceof TypeDeclaration<?> typeDeclaration) {
+            declaration = typeDeclaration;
+        }
+        if (declaration == null || fallback.getPkg() == null || fallback.getPkg().getModule() == null) {
+            return fallback;
+        }
+        IndexPoint resolved = JavaUtil.resolvePointByPath(editor.getIndex(), fallback.getPkg().getModule(),
+            JavaUtil.buildTypePath(compilationUnit, declaration));
+        return resolved != null ? resolved : fallback;
     }
 
     private FieldSignature resolveFieldSignatureFromSource(IndexPoint owner, String fieldName) {

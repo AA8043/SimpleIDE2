@@ -71,7 +71,17 @@ public class IndexPoint extends JSONSupport {
     }
 
     public String getImportQualifiedName() {
+        if (enclosingType != null) {
+            return enclosingType.getImportQualifiedName();
+        }
         return getQualifiedName();
+    }
+
+    public String getImportReferenceName() {
+        if (enclosingType == null) {
+            return name;
+        }
+        return enclosingType.getImportReferenceName() + "." + name;
     }
 
     public List<MethodSignature> getMethodList(String name) {

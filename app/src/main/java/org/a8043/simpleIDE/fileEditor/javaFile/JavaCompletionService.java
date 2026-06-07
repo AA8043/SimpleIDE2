@@ -8,8 +8,10 @@ import com.github.javaparser.ParseStart;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
@@ -114,7 +116,7 @@ public class JavaCompletionService {
         String scopeText = extractCompletionScopeText(context.getScopeStart());
 
         if ("this".equals(scopeText)) {
-            return new ResolvedCompletionScope(state.getIndexPoint(), false);
+            return new ResolvedCompletionScope(currentTypeAt(context.getCaretPosition(), compilationUnit), false);
         }
 
         TextMember typeMember = textContext.findTypeMember(scopeText);
@@ -146,9 +148,11 @@ public class JavaCompletionService {
 
     private ResolvedCompletionScope resolveExpressionScope(Expression expression, CompilationUnit compilationUnit) {
         return switch (expression) {
-            case ThisExpr ignored -> new ResolvedCompletionScope(state.getIndexPoint(), false);
-            case SuperExpr ignored ->
-                new ResolvedCompletionScope(state.getIndexPoint() != null ? state.getIndexPoint().getParent() : null, false);
+            case ThisExpr thisExpr -> new ResolvedCompletionScope(currentTypeFor(thisExpr, compilationUnit), false);
+            case SuperExpr superExpr -> {
+                IndexPoint currentType = currentTypeFor(superExpr, compilationUnit);
+                yield new ResolvedCompletionScope(currentType != null ? currentType.getParent() : null, false);
+            }
             case NameExpr nameExpr -> {
                 TextMember visibleMember = compilationUnit == null ? null : findVisibleMember(nameExpr);
                 if (visibleMember != null && visibleMember.getTypeName() != null) {
@@ -206,8 +210,9 @@ public class JavaCompletionService {
             }
         }
 
-        if (state.getIndexPoint() != null) {
-            var field = state.getIndexPoint().getField(name);
+        IndexPoint currentType = currentTypeFor(nameExpr, nameExpr.findCompilationUnit().orElse(null));
+        if (currentType != null) {
+            var field = currentType.getField(name);
             if (field != null && field.getType() != null) {
                 return new TextMember(field.getName(), typeResolver.formatIndexPointPath(field.getType()), "field");
             }
@@ -472,6 +477,9 @@ public class JavaCompletionService {
                 new CompleteItem("method", method.getName(), method.getReturnType() != null ?
                     StrUtil.join(".", (Object[]) method.getReturnType().getPath()) : "void",
                     caretPosition, start, method.getName()))));
+        JavaUtil.resolveNestedPoints(scopeType).forEach(nestedType -> memberList.add(new MemberCompletion(nestedType.getName(),
+            new CompleteItem("class", nestedType.getName(), nestedType.getQualifiedName(),
+                caretPosition, start, nestedType.getName()))));
 
         List<MemberCompletion> searchResult = SearchUtil.search(memberList, MemberCompletion::getKeyword, keyword);
         Set<String> added = new HashSet<>();
@@ -488,6 +496,44 @@ public class JavaCompletionService {
         addMemberCompletionItems(itemList, scopeType,
             context.getCaretPosition(), context.getReplaceStart(), context.getKeyword(), staticOnly);
         return itemList;
+    }
+
+    private IndexPoint currentTypeFor(Node node, CompilationUnit compilationUnit) {
+        IndexPoint fallback = state.getIndexPoint();
+        if (fallback == null || compilationUnit == null) {
+            return fallback;
+        }
+        TypeDeclaration<?> declaration = node.findAncestor(TypeDeclaration.class).orElse(null);
+        if (declaration == null && node instanceof TypeDeclaration<?> typeDeclaration) {
+            declaration = typeDeclaration;
+        }
+        return resolveCurrentType(declaration, compilationUnit, fallback);
+    }
+
+    private IndexPoint currentTypeAt(int caretPosition, CompilationUnit compilationUnit) {
+        IndexPoint fallback = state.getIndexPoint();
+        if (fallback == null || compilationUnit == null) {
+            return fallback;
+        }
+        return compilationUnit.findAll(TypeDeclaration.class).stream()
+            .filter(declaration -> declaration.getRange()
+                .map(range -> JavaUtil.getPosition(range.begin, getContent()) <= caretPosition &&
+                              JavaUtil.getPosition(range.end, getContent()) >= caretPosition)
+                .orElse(false))
+            .max(Comparator.comparingInt(declaration -> declaration.getRange()
+                .map(range -> JavaUtil.getPosition(range.begin, getContent())).orElse(-1)))
+            .map(declaration -> resolveCurrentType(declaration, compilationUnit, fallback))
+            .orElse(fallback);
+    }
+
+    private IndexPoint resolveCurrentType(TypeDeclaration<?> declaration, CompilationUnit compilationUnit,
+                                          IndexPoint fallback) {
+        if (declaration == null || fallback.getPkg() == null || fallback.getPkg().getModule() == null) {
+            return fallback;
+        }
+        IndexPoint resolved = JavaUtil.resolvePointByPath(editor.getIndex(), fallback.getPkg().getModule(),
+            JavaUtil.buildTypePath(compilationUnit, declaration));
+        return resolved != null ? resolved : fallback;
     }
 
     private JavaTextEditSegment remapIntermediateEditToOriginal(JavaTextEditSegment intermediateEdit,

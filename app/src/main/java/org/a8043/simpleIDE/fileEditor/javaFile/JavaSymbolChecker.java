@@ -7,6 +7,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -236,7 +237,7 @@ public class JavaSymbolChecker {
             return true;
         }
         // 字段(含继承字段)
-        IndexPoint currentType = state.getIndexPoint();
+        IndexPoint currentType = currentTypeFor(nameExpr, unit);
         MemberIndex memberIndex = collectMembers(currentType);
         if (memberIndex.hasField(name)) {
             return true;
@@ -282,9 +283,17 @@ public class JavaSymbolChecker {
                 return;
             }
             String name = fieldAccessExpr.getNameAsString();
+            String qualifiedName = JavaUtil.resolveQualifiedName(fieldAccessExpr);
+            if (qualifiedName != null && JavaUtil.resolveType(editor.getIndex(), currentTypeFor(fieldAccessExpr, unit),
+                qualifiedName, unit) != null) {
+                return;
+            }
             // 无法解析scope类型时保守放行(如java.lang这类包名前缀, scope类型为null)
             IndexPoint ownerType = typeResolver.resolveExpressionType(fieldAccessExpr.getScope(), unit);
             if (ownerType == null) {
+                return;
+            }
+            if (JavaUtil.resolveNestedPoint(ownerType, name) != null) {
                 return;
             }
             MemberIndex memberIndex = collectMembers(ownerType);
@@ -307,7 +316,7 @@ public class JavaSymbolChecker {
             IndexPoint ownerType;
             if (scope == null) {
                 // 无scope: 调用当前类型(含继承)的方法
-                ownerType = state.getIndexPoint();
+                ownerType = currentTypeFor(methodCallExpr, unit);
                 // 保守: 可能是静态导入的方法
                 if (isStaticImported(unit, name)) {
                     return;
@@ -380,7 +389,7 @@ public class JavaSymbolChecker {
         declaration.getFields().forEach(field -> field.getVariables()
             .forEach(variable -> fieldNames.add(variable.getNameAsString())));
 
-        CompilationUnit declarationUnit = isCurrentType(type) ? currentUnit : type.resolveCompilationUnit();
+        CompilationUnit declarationUnit = isTypeFromCurrentSource(type) ? currentUnit : type.resolveCompilationUnit();
         boolean complete = true;
         for (ClassOrInterfaceType superType : superTypesOf(declaration)) {
             IndexPoint superPoint = resolveSuperType(type, superType, declarationUnit);
@@ -406,7 +415,7 @@ public class JavaSymbolChecker {
      * 其它类型则从其源文件解析
      */
     private ClassOrInterfaceDeclaration resolveDeclaration(IndexPoint type) {
-        if (isCurrentType(type) && currentUnit != null) {
+        if (isTypeFromCurrentSource(type) && currentUnit != null) {
             return currentUnit.findAll(ClassOrInterfaceDeclaration.class).stream()
                 .filter(declaration -> Arrays.equals(JavaUtil.buildTypePath(currentUnit, declaration), type.getPath()))
                 .findFirst().orElse(null);
@@ -414,8 +423,32 @@ public class JavaSymbolChecker {
         return typeResolver.resolveTypeDeclaration(type);
     }
 
-    private boolean isCurrentType(IndexPoint type) {
-        return type == state.getIndexPoint();
+    private boolean isTypeFromCurrentSource(IndexPoint type) {
+        IndexPoint current = state.getIndexPoint();
+        if (type == null || current == null) {
+            return false;
+        }
+        return JavaUtil.isSameType(type, current) ||
+               type.getPkg() != null && current.getPkg() != null &&
+               Objects.equals(type.getPkg().getModule().getCacheName(), current.getPkg().getModule().getCacheName()) &&
+               Arrays.equals(type.getSourcePath(), current.getSourcePath());
+    }
+
+    private IndexPoint currentTypeFor(Node node, CompilationUnit unit) {
+        IndexPoint fallback = state.getIndexPoint();
+        if (fallback == null || unit == null) {
+            return fallback;
+        }
+        TypeDeclaration<?> declaration = node.findAncestor(TypeDeclaration.class).orElse(null);
+        if (declaration == null && node instanceof TypeDeclaration<?> typeDeclaration) {
+            declaration = typeDeclaration;
+        }
+        if (declaration == null || fallback.getPkg() == null || fallback.getPkg().getModule() == null) {
+            return fallback;
+        }
+        IndexPoint resolved = JavaUtil.resolvePointByPath(editor.getIndex(), fallback.getPkg().getModule(),
+            JavaUtil.buildTypePath(unit, declaration));
+        return resolved != null ? resolved : fallback;
     }
 
     private IndexPoint resolveSuperType(IndexPoint owner, ClassOrInterfaceType superType,

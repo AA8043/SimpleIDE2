@@ -7,6 +7,9 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import org.a8043.simpleIDE.project.ProjectModule;
@@ -440,6 +443,29 @@ public class JavaUtil {
             .filter(point -> Objects.equals(point.getName(), name))
             .filter(point -> isSameType(point.getEnclosingType(), owner))
             .findFirst().orElse(null);
+    }
+
+    public static List<IndexPoint> resolveNestedPoints(IndexPoint owner) {
+        if (owner == null || owner.getIndex() == null) {
+            return List.of();
+        }
+        return owner.getIndex().getIndexList().stream()
+            .filter(point -> isSameType(point.getEnclosingType(), owner))
+            .toList();
+    }
+
+    public static String resolveQualifiedName(Expression expression) {
+        if (expression instanceof NameExpr nameExpr) {
+            return nameExpr.getNameAsString();
+        }
+        if (expression instanceof FieldAccessExpr fieldAccessExpr) {
+            String scopeName = resolveQualifiedName(fieldAccessExpr.getScope());
+            if (scopeName == null) {
+                return null;
+            }
+            return scopeName + "." + fieldAccessExpr.getNameAsString();
+        }
+        return null;
     }
 
     private static IndexPoint resolveNestedPath(IndexPoint owner, String[] nestedPath, int offset) {

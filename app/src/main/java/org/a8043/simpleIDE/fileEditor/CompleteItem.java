@@ -32,7 +32,8 @@ public class CompleteItem {
     public CompleteItem(IndexPoint completion, int caretPositionAtBegin, int start) {
         this(new DefaultNode("class", completion.getName(),
                 completion.getPkg() != null ? completion.getQualifiedName() : "."),
-            caretPositionAtBegin, start, completion.getName(),
+            caretPositionAtBegin, start,
+            completion.getPkg() != null ? completion.getImportReferenceName() : completion.getName(),
             completion.getPkg() != null ? completion.getImportQualifiedName() : null);
     }
 
